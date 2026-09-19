@@ -6,7 +6,7 @@ minimal Java/Maven foundation with an entry point that prints the project name.
 
 ## Prerequisites
 
-- Eclipse Temurin JDK 25.0.4.1 (Java 25 LTS).
+- Java 25 LTS. Tested with Eclipse Temurin 25.0.4.1.  
 - On Linux, a POSIX shell, `curl` or `wget`, and `unzip` or `tar`.
 - Network access for the initial Maven and build-plugin downloads.
 
