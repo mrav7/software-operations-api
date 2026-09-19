@@ -28,17 +28,11 @@ public class SoftwareComponent {
         this.updatedAt = now;
     }
 
-    public UUID getId() {
-        return id;
-    }
+    public UUID getId() { return id; }
 
-    public String getName() {
-        return name;
-    }
+    public String getName() { return name; }
 
-    public String getDescription() {
-        return description;
-    }
+    public String getDescription() { return description; }
 
     public boolean isActive() {
         return active;
