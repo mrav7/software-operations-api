@@ -39,9 +39,10 @@ For builds starting without previous generated output:
 ./mvnw clean package
 ```
 
-`test` compiles sources and runs the test phase. There are currently no automated
-tests or test-framework dependencies. `package` also creates the project JAR
-under `target/`.
+`test` compiles sources and runs the JUnit unit-test suite. The current tests
+protect pure-Java domain construction, the WorkOrder lifecycle and invariants,
+blocking, terminal states, deployment requirements, and progressive
+immutability. `package` also creates the project JAR under `target/`.
 
 ## Run
 
@@ -59,6 +60,5 @@ Software Operations API
 ## Source layout
 
 - `src/main/java/` contains application source code.
-- `src/test/java/` is Maven's standard location for test source code; it has no
-  tracked source files yet.
+- `src/test/java/` contains the JUnit domain unit tests.
 - `target/` contains generated build output and is ignored by Git.
