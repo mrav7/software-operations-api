@@ -7,6 +7,7 @@ and creates and retrieves work orders using the existing Java domain.
 ## Prerequisites
 
 - Java 25 LTS. Tested with Eclipse Temurin 25.0.4.1.  
+- PostgreSQL 18.6 with separate databases for application use and integration tests.
 - On Linux, a POSIX shell, `curl` or `wget`, and `unzip` or `tar`.
 - Network access for the initial Maven and build-plugin downloads.
 
@@ -25,7 +26,16 @@ a global Maven installation is unnecessary.
 
 ## Build
 
-From the repository root:
+Configure the dedicated PostgreSQL test database before running the test suite:
+
+```bash
+export TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/software_operations_api_test
+export TEST_DB_USERNAME=app_user
+export TEST_DB_PASSWORD=change-me
+```
+
+Use credentials for a test-only database; tests must not target the development
+database. From the repository root:
 
 ```bash
 ./mvnw test
@@ -39,13 +49,26 @@ For builds starting without previous generated output:
 ./mvnw clean package
 ```
 
-`test` compiles sources and runs the domain and Spring HTTP-boundary tests. The domain tests
-protect pure-Java domain construction, the WorkOrder lifecycle and invariants,
-blocking, terminal states, deployment requirements, and progressive
-immutability. Web tests verify registration, creation, retrieval, and domain
-integration. `package` also creates an executable Spring Boot JAR under `target/`.
+`test` compiles sources and runs the domain, Spring HTTP-boundary, and PostgreSQL
+persistence tests. The domain tests protect pure-Java domain construction, the
+WorkOrder lifecycle and invariants, blocking, terminal states, deployment
+requirements, and progressive immutability. Web tests verify registration,
+creation, retrieval, and domain integration. Persistence tests verify JPA
+round-trips and relational constraints against PostgreSQL. `package` also
+creates an executable Spring Boot JAR under `target/`.
 
 ## Run
+
+Configure the application datasource before startup:
+
+```bash
+export DB_URL=jdbc:postgresql://127.0.0.1:5432/software_operations_api_dev
+export DB_USERNAME=app_user
+export DB_PASSWORD=change-me
+```
+
+Flyway applies pending migrations during application startup, and Hibernate
+validates the resulting schema without creating or updating it.
 
 ```bash
 ./mvnw spring-boot:run
@@ -108,8 +131,10 @@ Errors use `application/problem+json`:
 For example, a blank required field returns a ProblemDetail response with an
 `errors` list. The API does not expose direct status editing.
 
-Data is temporary, process-local, and lost on restart. Component-name uniqueness
-is not yet enforced. Existing domain invariants still apply.
+The HTTP controllers still use temporary, process-local state, so API-created
+data is lost on restart. The persistence foundation and database constraints are
+currently exercised through repository integration tests; the HTTP boundary has
+not yet been migrated to repositories. Existing domain invariants still apply.
 
 ## Source layout
 

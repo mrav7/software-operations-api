@@ -1,27 +1,80 @@
 package io.github.mrav7.softwareoperationsapi.domain;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "work_order")
 public class WorkOrder {
-    private final UUID id;
+    @Id
+    @Column(nullable = false, updatable = false)
+    private UUID id;
+
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "component_id", nullable = false)
     private SoftwareComponent component;
+
+    @Column(nullable = false, columnDefinition = "text")
     private String title;
+
+    @Column(columnDefinition = "text")
     private String description;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
     private WorkOrderType type;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
     private Priority priority;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
     private WorkOrderStatus status;
+
+    @Column(name = "target_version", columnDefinition = "text")
     private String targetVersion;
+
+    @Column(name = "blocking_reason", columnDefinition = "text")
     private String blockingReason;
+
+    @Column(name = "blocked_at")
     private Instant blockedAt;
+
+    @Column(name = "resolution_summary", columnDefinition = "text")
     private String resolutionSummary;
+
+    @Column(name = "cancellation_reason", columnDefinition = "text")
     private String cancellationReason;
-    private final Instant createdAt;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "planned_at")
     private Instant plannedAt;
+
+    @Column(name = "started_at")
     private Instant startedAt;
+
+    @Column(name = "completed_at")
     private Instant completedAt;
+
+    @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    protected WorkOrder() {
+    }
 
     /**
      * Creates a work order in {@link WorkOrderStatus#CREATED} with internally generated
@@ -60,7 +113,7 @@ public class WorkOrder {
         this.plannedAt = null;
         this.startedAt = null;
         this.completedAt = null;
-        Instant now = Instant.now();
+        Instant now = now();
         this.createdAt = now;
         this.updatedAt = now;
     }
@@ -73,7 +126,7 @@ public class WorkOrder {
     public void plan() {
         requireStatus(WorkOrderStatus.CREATED, "plan");
 
-        Instant now = Instant.now();
+        Instant now = now();
         this.status = WorkOrderStatus.PLANNED;
         this.plannedAt = now;
         this.updatedAt = now;
@@ -87,7 +140,7 @@ public class WorkOrder {
     public void start() {
         requireStatus(WorkOrderStatus.PLANNED, "start");
 
-        Instant now = Instant.now();
+        Instant now = now();
         this.status = WorkOrderStatus.IN_PROGRESS;
         this.startedAt = now;
         this.updatedAt = now;
@@ -105,7 +158,7 @@ public class WorkOrder {
         requireStatus(WorkOrderStatus.IN_PROGRESS, "block");
         requireNonBlank(blockingReason, "blockingReason");
 
-        Instant now = Instant.now();
+        Instant now = now();
         this.status = WorkOrderStatus.BLOCKED;
         this.blockingReason = blockingReason;
         this.blockedAt = now;
@@ -120,7 +173,7 @@ public class WorkOrder {
     public void resume() {
         requireStatus(WorkOrderStatus.BLOCKED, "resume");
 
-        Instant now = Instant.now();
+        Instant now = now();
         this.status = WorkOrderStatus.IN_PROGRESS;
         this.blockingReason = null;
         this.blockedAt = null;
@@ -139,7 +192,7 @@ public class WorkOrder {
         requireStatus(WorkOrderStatus.IN_PROGRESS, "complete");
         requireNonBlank(resolutionSummary, "resolutionSummary");
 
-        Instant now = Instant.now();
+        Instant now = now();
         this.resolutionSummary = resolutionSummary;
         this.completedAt = now;
         this.status = WorkOrderStatus.COMPLETED;
@@ -160,7 +213,7 @@ public class WorkOrder {
         }
         requireNonBlank(cancellationReason, "cancellationReason");
 
-        Instant now = Instant.now();
+        Instant now = now();
         this.cancellationReason = cancellationReason;
         if (status == WorkOrderStatus.BLOCKED) {
             this.blockingReason = null;
@@ -180,7 +233,7 @@ public class WorkOrder {
         requireStatus(WorkOrderStatus.CREATED, "change component");
         Objects.requireNonNull(component, "component must not be null");
 
-        Instant now = Instant.now();
+        Instant now = now();
         this.component = component;
         this.updatedAt = now;
     }
@@ -197,7 +250,7 @@ public class WorkOrder {
         WorkOrderType requiredType = Objects.requireNonNull(type, "type must not be null");
         validateDeploymentTarget(requiredType, targetVersion);
 
-        Instant now = Instant.now();
+        Instant now = now();
         this.type = requiredType;
         this.updatedAt = now;
     }
@@ -212,7 +265,7 @@ public class WorkOrder {
         requireCreatedOrPlanned("change title");
         Objects.requireNonNull(title, "title must not be null");
 
-        Instant now = Instant.now();
+        Instant now = now();
         this.title = title;
         this.updatedAt = now;
     }
@@ -226,7 +279,7 @@ public class WorkOrder {
     public void changeDescription(String description) {
         requireCreatedOrPlanned("change description");
 
-        Instant now = Instant.now();
+        Instant now = now();
         this.description = description;
         this.updatedAt = now;
     }
@@ -243,7 +296,7 @@ public class WorkOrder {
         }
         Objects.requireNonNull(priority, "priority must not be null");
 
-        Instant now = Instant.now();
+        Instant now = now();
         this.priority = priority;
         this.updatedAt = now;
     }
@@ -259,7 +312,7 @@ public class WorkOrder {
         requireCreatedOrPlanned("change target version");
         validateDeploymentTarget(type, targetVersion);
 
-        Instant now = Instant.now();
+        Instant now = now();
         this.targetVersion = targetVersion;
         this.updatedAt = now;
     }
@@ -362,5 +415,9 @@ public class WorkOrder {
             throw new IllegalArgumentException(
                     "targetVersion must not be null or blank for deployment");
         }
+    }
+
+    private static Instant now() {
+        return Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 }
