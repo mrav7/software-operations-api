@@ -135,7 +135,9 @@ For example, a blank required field returns a ProblemDetail response with an
 Component and WorkOrder HTTP operations use PostgreSQL-backed Spring Data
 repositories. Successful lifecycle transitions are written to PostgreSQL before
 their responses are returned. Flyway owns schema creation and evolution, while
-Hibernate validates that the mapped entities match the migrated schema.
+Hibernate validates that the mapped entities match the migrated schema. HTTP-created
+resources remain available across application restarts while their PostgreSQL data
+is retained.
 
 ## Source layout
 
