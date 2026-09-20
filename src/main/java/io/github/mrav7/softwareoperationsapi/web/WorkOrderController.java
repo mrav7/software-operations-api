@@ -20,19 +20,31 @@ import io.github.mrav7.softwareoperationsapi.domain.SoftwareComponent;
 import io.github.mrav7.softwareoperationsapi.domain.WorkOrder;
 import io.github.mrav7.softwareoperationsapi.domain.WorkOrderStatus;
 import io.github.mrav7.softwareoperationsapi.domain.WorkOrderType;
+import io.github.mrav7.softwareoperationsapi.persistence.SoftwareComponentRepository;
+import io.github.mrav7.softwareoperationsapi.persistence.WorkOrderRepository;
 
 @RestController
 @RequestMapping("/api/work-orders")
 class WorkOrderController {
-    private final TemporaryState state;
+    private final SoftwareComponentRepository componentRepository;
+    private final WorkOrderRepository workOrderRepository;
 
-    WorkOrderController(TemporaryState state) {
-        this.state = state;
+    WorkOrderController(
+            SoftwareComponentRepository componentRepository,
+            WorkOrderRepository workOrderRepository) {
+        this.componentRepository = componentRepository;
+        this.workOrderRepository = workOrderRepository;
     }
 
     @PostMapping
     ResponseEntity<WorkOrderResponse> create(@Valid @RequestBody CreateWorkOrderRequest request) {
-        SoftwareComponent component = state.requireComponent(request.componentId());
+        SoftwareComponent component = componentRepository.findById(request.componentId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Component", request.componentId()));
+        if (!component.isActive()) {
+            throw new InactiveComponentException(component.getId());
+        }
+
         WorkOrder workOrder;
         try {
             workOrder = new WorkOrder(component, request.title(), request.description(),
@@ -40,20 +52,20 @@ class WorkOrderController {
         } catch (IllegalArgumentException exception) {
             throw new InvalidDomainInputException(exception.getMessage());
         }
-        state.addWorkOrder(workOrder);
-        return ResponseEntity.created(URI.create("/api/work-orders/" + workOrder.getId()))
-                .body(WorkOrderResponse.from(workOrder));
+        WorkOrder persisted = workOrderRepository.saveAndFlush(workOrder);
+        return ResponseEntity.created(URI.create("/api/work-orders/" + persisted.getId()))
+                .body(WorkOrderResponse.from(persisted));
     }
 
     @GetMapping("/{id}")
     ResponseEntity<WorkOrderResponse> get(@PathVariable UUID id) {
-        return ResponseEntity.ok(WorkOrderResponse.from(state.requireWorkOrder(id)));
+        return ResponseEntity.ok(WorkOrderResponse.from(requireWorkOrder(id)));
     }
 
     @PostMapping("/{id}/transitions")
     ResponseEntity<WorkOrderResponse> transition(
             @PathVariable UUID id, @Valid @RequestBody TransitionRequest request) {
-        WorkOrder workOrder = state.requireWorkOrder(id);
+        WorkOrder workOrder = requireWorkOrder(id);
         switch (request.action()) {
             case PLAN -> workOrder.plan();
             case START -> workOrder.start();
@@ -64,7 +76,13 @@ class WorkOrderController {
             case CANCEL -> translateTransitionInput(
                     () -> workOrder.cancel(request.cancellationReason()));
         }
-        return ResponseEntity.ok(WorkOrderResponse.from(workOrder));
+        WorkOrder persisted = workOrderRepository.saveAndFlush(workOrder);
+        return ResponseEntity.ok(WorkOrderResponse.from(persisted));
+    }
+
+    private WorkOrder requireWorkOrder(UUID id) {
+        return workOrderRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Work order", id));
     }
 
     private static void translateTransitionInput(Runnable transition) {

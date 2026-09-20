@@ -57,6 +57,18 @@ class ApiExceptionHandler {
         return problem(HttpStatus.CONFLICT, exception.getMessage(), request);
     }
 
+    @ExceptionHandler(ComponentNameConflictException.class)
+    ProblemDetail handleComponentNameConflict(
+            ComponentNameConflictException exception, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(InactiveComponentException.class)
+    ProblemDetail handleInactiveComponent(
+            InactiveComponentException exception, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, exception.getMessage(), request);
+    }
+
     private static ProblemDetail problem(HttpStatus status, String detail, HttpServletRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setInstance(URI.create(request.getRequestURI()));

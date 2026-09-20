@@ -2,15 +2,20 @@ package io.github.mrav7.softwareoperationsapi.web;
 
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+
+import io.github.mrav7.softwareoperationsapi.persistence.SoftwareComponentRepository;
+import io.github.mrav7.softwareoperationsapi.persistence.WorkOrderRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,6 +30,21 @@ class ErrorContractTest {
 
     @Autowired
     private ObjectMapper json;
+
+    @Autowired
+    private SoftwareComponentRepository componentRepository;
+
+    @Autowired
+    private WorkOrderRepository workOrderRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void cleanDatabase() {
+        workOrderRepository.deleteAll();
+        componentRepository.deleteAll();
+    }
 
     @Test
     void validationFailuresUseProblemDetailWithSortedFieldErrors() throws Exception {
@@ -116,6 +136,40 @@ class ErrorContractTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"action\":\"COMPLETE\"}"))
                 .andReturn().getResponse(), 400, "Bad Request",
                 "Transition input is invalid", "/api/work-orders/" + orderId + "/transitions");
+
+        assertProblem(mvc.perform(post("/api/work-orders/{id}/transitions", orderId)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"action\":\"BLOCK\"}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "Transition input is invalid", "/api/work-orders/" + orderId + "/transitions");
+
+        assertProblem(mvc.perform(post("/api/work-orders/{id}/transitions", orderId)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"action\":\"CANCEL\"}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "Transition input is invalid", "/api/work-orders/" + orderId + "/transitions");
+    }
+
+    @Test
+    void duplicateComponentNameUsesConflictProblemDetail() throws Exception {
+        createComponent();
+
+        assertProblem(mvc.perform(post("/api/components")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"configuration-service\",\"description\":\"Duplicate\"}"))
+                .andReturn().getResponse(), 409, "Conflict",
+                "Component name already exists", "/api/components");
+    }
+
+    @Test
+    void inactiveComponentRejectsNewWorkOrderWithConflictProblemDetail() throws Exception {
+        String componentId = createComponent();
+        jdbcTemplate.update("UPDATE software_component SET active = FALSE WHERE id = ?",
+                UUID.fromString(componentId));
+
+        assertProblem(mvc.perform(post("/api/work-orders")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(workOrderRequest(componentId, "CORRECTIVE_MAINTENANCE", "null")))
+                .andReturn().getResponse(), 409, "Conflict",
+                "Component " + componentId + " is inactive", "/api/work-orders");
     }
 
     private JsonNode assertProblem(MockHttpServletResponse response, int status, String title,

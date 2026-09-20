@@ -1,8 +1,8 @@
 # Software Operations API
 
 Java/Spring Boot backend for software operational work and controlled lifecycle
-transitions. The current HTTP API registers and retrieves software components
-and creates and retrieves work orders using the existing Java domain.
+transitions. The HTTP API stores components and work orders in PostgreSQL and
+persists WorkOrder lifecycle transitions through the existing Java domain.
 
 ## Prerequisites
 
@@ -126,15 +126,16 @@ Errors use `application/problem+json`:
 
 - `400 Bad Request`: invalid request or operation input.
 - `404 Not Found`: unknown component or WorkOrder.
-- `409 Conflict`: lifecycle action incompatible with the WorkOrder state.
+- `409 Conflict`: lifecycle action incompatible with the WorkOrder state,
+  duplicate component name, or inactive component selected for new work.
 
 For example, a blank required field returns a ProblemDetail response with an
 `errors` list. The API does not expose direct status editing.
 
-The HTTP controllers still use temporary, process-local state, so API-created
-data is lost on restart. The persistence foundation and database constraints are
-currently exercised through repository integration tests; the HTTP boundary has
-not yet been migrated to repositories. Existing domain invariants still apply.
+Component and WorkOrder HTTP operations use PostgreSQL-backed Spring Data
+repositories. Successful lifecycle transitions are written to PostgreSQL before
+their responses are returned. Flyway owns schema creation and evolution, while
+Hibernate validates that the mapped entities match the migrated schema.
 
 ## Source layout
 

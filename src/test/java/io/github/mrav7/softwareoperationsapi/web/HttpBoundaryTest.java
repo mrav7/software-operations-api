@@ -2,6 +2,7 @@ package io.github.mrav7.softwareoperationsapi.web;
 
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -12,10 +13,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import io.github.mrav7.softwareoperationsapi.persistence.SoftwareComponentRepository;
+import io.github.mrav7.softwareoperationsapi.persistence.WorkOrderRepository;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -30,7 +33,16 @@ class HttpBoundaryTest {
     private ObjectMapper json;
 
     @Autowired
-    private TemporaryState state;
+    private SoftwareComponentRepository componentRepository;
+
+    @Autowired
+    private WorkOrderRepository workOrderRepository;
+
+    @BeforeEach
+    void cleanDatabase() {
+        workOrderRepository.deleteAll();
+        componentRepository.deleteAll();
+    }
 
     @Test
     void componentCanBeCreatedAndRetrievedAtItsLocation() throws Exception {
@@ -73,8 +85,6 @@ class HttpBoundaryTest {
         assertFalse(body.has("component"));
         assertNotNull(body.get("createdAt"));
         assertEquals(body.get("createdAt"), body.get("updatedAt"));
-        assertSame(state.findComponent(UUID.fromString(componentId)).orElseThrow(),
-                state.findWorkOrder(orderId).orElseThrow().getComponent());
         assertEquals("/api/work-orders/" + orderId, created.getHeader("Location"));
 
         MockHttpServletResponse retrieved = mvc.perform(get(created.getHeader("Location")))
@@ -94,7 +104,8 @@ class HttpBoundaryTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(workOrderRequest(missingId.toString(), "\"2.4.1\"")))
                 .andReturn().getResponse().getStatus());
-        assertTrue(state.findComponent(missingId).isEmpty());
+        assertTrue(componentRepository.findById(missingId).isEmpty());
+        assertTrue(workOrderRepository.findById(missingId).isEmpty());
         assertEquals(201, createComponent().getStatus());
     }
 
@@ -110,12 +121,72 @@ class HttpBoundaryTest {
         assertTrue(response.getContentType().startsWith("application/problem+json"));
     }
 
+    @Test
+    void lifecycleTransitionsRemainVisibleThroughSubsequentHttpReads() throws Exception {
+        String orderId = createCorrectiveWorkOrder();
+
+        transition(orderId, "{\"action\":\"PLAN\"}", "PLANNED");
+        assertRetrievedStatus(orderId, "PLANNED");
+        transition(orderId, "{\"action\":\"START\"}", "IN_PROGRESS");
+        assertRetrievedStatus(orderId, "IN_PROGRESS");
+        transition(orderId,
+                "{\"action\":\"BLOCK\",\"blockingReason\":\"Waiting for access\"}",
+                "BLOCKED");
+        assertRetrievedStatus(orderId, "BLOCKED");
+        transition(orderId, "{\"action\":\"RESUME\"}", "IN_PROGRESS");
+        assertRetrievedStatus(orderId, "IN_PROGRESS");
+        transition(orderId,
+                "{\"action\":\"COMPLETE\",\"resolutionSummary\":\"Access restored\"}",
+                "COMPLETED");
+        assertRetrievedStatus(orderId, "COMPLETED");
+    }
+
+    @Test
+    void cancellationRemainsVisibleThroughSubsequentHttpRead() throws Exception {
+        String orderId = createCorrectiveWorkOrder();
+
+        transition(orderId,
+                "{\"action\":\"CANCEL\",\"cancellationReason\":\"Work superseded\"}",
+                "CANCELLED");
+        assertRetrievedStatus(orderId, "CANCELLED");
+    }
+
     private MockHttpServletResponse createComponent() throws Exception {
         return mvc.perform(post("/api/components").contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"name":"configuration-service","description":"Configuration API"}
                         """))
                 .andReturn().getResponse();
+    }
+
+    private String createCorrectiveWorkOrder() throws Exception {
+        String componentId = json.readTree(createComponent().getContentAsString())
+                .get("id").asString();
+        MockHttpServletResponse response = mvc.perform(post("/api/work-orders")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(workOrderRequest(componentId, "null").replace(
+                        "\"DEPLOYMENT\"", "\"CORRECTIVE_MAINTENANCE\"")))
+                .andReturn().getResponse();
+        assertEquals(201, response.getStatus());
+        return json.readTree(response.getContentAsString()).get("id").asString();
+    }
+
+    private void transition(String orderId, String request, String expectedStatus) throws Exception {
+        MockHttpServletResponse response = mvc.perform(
+                post("/api/work-orders/{id}/transitions", orderId)
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+        assertEquals(expectedStatus,
+                json.readTree(response.getContentAsString()).get("status").asString());
+    }
+
+    private void assertRetrievedStatus(String orderId, String expectedStatus) throws Exception {
+        MockHttpServletResponse response = mvc.perform(get("/api/work-orders/{id}", orderId))
+                .andReturn().getResponse();
+        assertEquals(200, response.getStatus());
+        assertEquals(expectedStatus,
+                json.readTree(response.getContentAsString()).get("status").asString());
     }
 
     private String workOrderRequest(String componentId, String targetVersionJson) {
