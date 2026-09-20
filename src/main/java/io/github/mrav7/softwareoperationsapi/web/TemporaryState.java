@@ -24,11 +24,19 @@ class TemporaryState {
         return Optional.ofNullable(id == null ? null : components.get(id));
     }
 
+    SoftwareComponent requireComponent(UUID id) {
+        return findComponent(id).orElseThrow(() -> new ResourceNotFoundException("Component", id));
+    }
+
     void addWorkOrder(WorkOrder workOrder) {
         workOrders.put(workOrder.getId(), workOrder);
     }
 
     Optional<WorkOrder> findWorkOrder(UUID id) {
         return Optional.ofNullable(workOrders.get(id));
+    }
+
+    WorkOrder requireWorkOrder(UUID id) {
+        return findWorkOrder(id).orElseThrow(() -> new ResourceNotFoundException("Work order", id));
     }
 }

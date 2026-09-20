@@ -84,10 +84,32 @@ curl http://localhost:8080/api/work-orders/WORK_ORDER_ID
 Replace the ID placeholders with UUIDs returned by the API. Retrieval returns
 `200 OK`; new work orders start in `CREATED`.
 
-Data is temporary, process-local, and lost on restart. Only these four endpoints
-are available. Component-name uniqueness is not yet enforced. Missing resources
-return an empty `404`; input validation and error responses are not yet a stable
-contract. Existing domain invariants still apply.
+## Lifecycle transitions and errors
+
+Use an explicit action to change a WorkOrder lifecycle state:
+
+```bash
+curl -i -H 'Content-Type: application/json' \
+  -d '{"action":"PLAN"}' \
+  http://localhost:8080/api/work-orders/WORK_ORDER_ID/transitions
+```
+
+The available actions are `PLAN`, `START`, `BLOCK`, `RESUME`, `COMPLETE`, and
+`CANCEL`. `BLOCK`, `COMPLETE`, and `CANCEL` require their corresponding domain
+context (`blockingReason`, `resolutionSummary`, and `cancellationReason`).
+Successful transitions return the updated WorkOrder with `200 OK`.
+
+Errors use `application/problem+json`:
+
+- `400 Bad Request`: invalid request or operation input.
+- `404 Not Found`: unknown component or WorkOrder.
+- `409 Conflict`: lifecycle action incompatible with the WorkOrder state.
+
+For example, a blank required field returns a ProblemDetail response with an
+`errors` list. The API does not expose direct status editing.
+
+Data is temporary, process-local, and lost on restart. Component-name uniqueness
+is not yet enforced. Existing domain invariants still apply.
 
 ## Source layout
 

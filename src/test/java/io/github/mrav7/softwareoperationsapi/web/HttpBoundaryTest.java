@@ -2,7 +2,6 @@ package io.github.mrav7.softwareoperationsapi.web;
 
 import java.util.UUID;
 
-import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,10 +14,8 @@ import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -104,11 +101,13 @@ class HttpBoundaryTest {
     @Test
     void httpCreationDoesNotBypassDeploymentInvariant() throws Exception {
         String componentId = json.readTree(createComponent().getContentAsString()).get("id").asString();
-        // Domain failures are not mapped to the final HTTP error contract yet.
-        ServletException failure = assertThrows(ServletException.class, () -> mvc.perform(
+        MockHttpServletResponse response = mvc.perform(
                 post("/api/work-orders").contentType(MediaType.APPLICATION_JSON)
-                        .content(workOrderRequest(componentId, "null"))));
-        assertInstanceOf(IllegalArgumentException.class, failure.getCause());
+                        .content(workOrderRequest(componentId, "null")))
+                .andReturn().getResponse();
+
+        assertEquals(400, response.getStatus());
+        assertTrue(response.getContentType().startsWith("application/problem+json"));
     }
 
     private MockHttpServletResponse createComponent() throws Exception {

@@ -4,6 +4,9 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.UUID;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,13 +31,15 @@ class WorkOrderController {
     }
 
     @PostMapping
-    ResponseEntity<WorkOrderResponse> create(@RequestBody CreateWorkOrderRequest request) {
-        SoftwareComponent component = state.findComponent(request.componentId()).orElse(null);
-        if (component == null) {
-            return ResponseEntity.notFound().build();
+    ResponseEntity<WorkOrderResponse> create(@Valid @RequestBody CreateWorkOrderRequest request) {
+        SoftwareComponent component = state.requireComponent(request.componentId());
+        WorkOrder workOrder;
+        try {
+            workOrder = new WorkOrder(component, request.title(), request.description(),
+                    request.type(), request.priority(), request.targetVersion());
+        } catch (IllegalArgumentException exception) {
+            throw new InvalidDomainInputException(exception.getMessage());
         }
-        WorkOrder workOrder = new WorkOrder(component, request.title(), request.description(),
-                request.type(), request.priority(), request.targetVersion());
         state.addWorkOrder(workOrder);
         return ResponseEntity.created(URI.create("/api/work-orders/" + workOrder.getId()))
                 .body(WorkOrderResponse.from(workOrder));
@@ -42,12 +47,45 @@ class WorkOrderController {
 
     @GetMapping("/{id}")
     ResponseEntity<WorkOrderResponse> get(@PathVariable UUID id) {
-        return ResponseEntity.of(state.findWorkOrder(id).map(WorkOrderResponse::from));
+        return ResponseEntity.ok(WorkOrderResponse.from(state.requireWorkOrder(id)));
+    }
+
+    @PostMapping("/{id}/transitions")
+    ResponseEntity<WorkOrderResponse> transition(
+            @PathVariable UUID id, @Valid @RequestBody TransitionRequest request) {
+        WorkOrder workOrder = state.requireWorkOrder(id);
+        switch (request.action()) {
+            case PLAN -> workOrder.plan();
+            case START -> workOrder.start();
+            case BLOCK -> translateTransitionInput(() -> workOrder.block(request.blockingReason()));
+            case RESUME -> workOrder.resume();
+            case COMPLETE -> translateTransitionInput(
+                    () -> workOrder.complete(request.resolutionSummary()));
+            case CANCEL -> translateTransitionInput(
+                    () -> workOrder.cancel(request.cancellationReason()));
+        }
+        return ResponseEntity.ok(WorkOrderResponse.from(workOrder));
+    }
+
+    private static void translateTransitionInput(Runnable transition) {
+        try {
+            transition.run();
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw new InvalidDomainInputException("Transition input is invalid");
+        }
     }
 
     public record CreateWorkOrderRequest(
-            UUID componentId, String title, String description,
-            WorkOrderType type, Priority priority, String targetVersion) {}
+            @NotNull UUID componentId, @NotBlank String title, String description,
+            @NotNull WorkOrderType type, @NotNull Priority priority, String targetVersion) {}
+
+    public record TransitionRequest(
+            @NotNull TransitionAction action, String blockingReason,
+            String resolutionSummary, String cancellationReason) {}
+
+    public enum TransitionAction {
+        PLAN, START, BLOCK, RESUME, COMPLETE, CANCEL
+    }
 
     public record WorkOrderResponse(
             UUID id, UUID componentId, String title, String description,
