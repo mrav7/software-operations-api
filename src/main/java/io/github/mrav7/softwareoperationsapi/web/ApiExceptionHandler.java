@@ -12,7 +12,10 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import io.github.mrav7.softwareoperationsapi.application.ComponentHasActiveWorkException;
 import io.github.mrav7.softwareoperationsapi.application.ComponentNameConflictException;
@@ -23,6 +26,8 @@ import io.github.mrav7.softwareoperationsapi.domain.InvalidWorkOrderStateExcepti
 
 @RestControllerAdvice
 class ApiExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ProblemDetail handleValidation(
             MethodArgumentNotValidException exception, HttpServletRequest request) {
@@ -44,6 +49,11 @@ class ApiExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     ProblemDetail handleTypeMismatch(HttpServletRequest request) {
         return problem(HttpStatus.BAD_REQUEST, "Request parameter is invalid", request);
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    ProblemDetail handleNoResourceFound(HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "Resource not found", request);
     }
 
     @ExceptionHandler(ResourceNotFoundException.class)
@@ -78,6 +88,13 @@ class ApiExceptionHandler {
     ProblemDetail handleInactiveComponent(
             InactiveComponentException exception, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(Exception.class)
+    ProblemDetail handleUnexpectedException(Exception exception, HttpServletRequest request) {
+        log.error("Unexpected request failure: method={} path={}",
+                request.getMethod(), request.getRequestURI(), exception);
+        return problem(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred", request);
     }
 
     private static ProblemDetail problem(HttpStatus status, String detail, HttpServletRequest request) {

@@ -6,6 +6,8 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +15,7 @@ import io.github.mrav7.softwareoperationsapi.domain.Priority;
 import io.github.mrav7.softwareoperationsapi.domain.SoftwareComponent;
 import io.github.mrav7.softwareoperationsapi.domain.WorkLog;
 import io.github.mrav7.softwareoperationsapi.domain.WorkOrder;
+import io.github.mrav7.softwareoperationsapi.domain.WorkOrderStatus;
 import io.github.mrav7.softwareoperationsapi.domain.WorkOrderType;
 import io.github.mrav7.softwareoperationsapi.persistence.SoftwareComponentRepository;
 import io.github.mrav7.softwareoperationsapi.persistence.WorkLogRepository;
@@ -20,6 +23,8 @@ import io.github.mrav7.softwareoperationsapi.persistence.WorkOrderRepository;
 
 @Service
 public class WorkOrderService {
+    private static final Logger log = LoggerFactory.getLogger(WorkOrderService.class);
+
     private final SoftwareComponentRepository componentRepository;
     private final WorkOrderRepository workOrderRepository;
     private final WorkLogRepository workLogRepository;
@@ -51,7 +56,10 @@ public class WorkOrderService {
         } catch (IllegalArgumentException | NullPointerException exception) {
             throw new InvalidDomainInputException(exception.getMessage());
         }
-        return workOrderRepository.save(workOrder);
+        WorkOrder savedWorkOrder = workOrderRepository.save(workOrder);
+        log.info("WorkOrder created: id={} componentId={} type={} priority={}",
+                savedWorkOrder.getId(), componentId, type, priority);
+        return savedWorkOrder;
     }
 
     public WorkOrder get(UUID id) {
@@ -97,56 +105,74 @@ public class WorkOrderService {
     @Transactional
     public WorkOrder plan(UUID id) {
         WorkOrder workOrder = requireWorkOrder(id);
+        WorkOrderStatus previousStatus = workOrder.getStatus();
         workOrder.plan();
         recordStatusChange(workOrder, "Work order planned.");
+        logTransition(workOrder, "PLAN", previousStatus);
         return workOrder;
     }
 
     @Transactional
     public WorkOrder start(UUID id) {
         WorkOrder workOrder = requireWorkOrder(id);
+        WorkOrderStatus previousStatus = workOrder.getStatus();
         workOrder.start();
         recordStatusChange(workOrder, "Work order started.");
+        logTransition(workOrder, "START", previousStatus);
         return workOrder;
     }
 
     @Transactional
     public WorkOrder block(UUID id, String blockingReason) {
         WorkOrder workOrder = requireWorkOrder(id);
+        WorkOrderStatus previousStatus = workOrder.getStatus();
         translateTransitionInput(() -> workOrder.block(blockingReason));
         recordStatusChange(workOrder,
                 "Work order blocked: " + workOrder.getBlockingReason());
+        logTransition(workOrder, "BLOCK", previousStatus);
         return workOrder;
     }
 
     @Transactional
     public WorkOrder resume(UUID id) {
         WorkOrder workOrder = requireWorkOrder(id);
+        WorkOrderStatus previousStatus = workOrder.getStatus();
         workOrder.resume();
         recordStatusChange(workOrder, "Work order resumed.");
+        logTransition(workOrder, "RESUME", previousStatus);
         return workOrder;
     }
 
     @Transactional
     public WorkOrder complete(UUID id, String resolutionSummary) {
         WorkOrder workOrder = requireWorkOrder(id);
+        WorkOrderStatus previousStatus = workOrder.getStatus();
         translateTransitionInput(() -> workOrder.complete(resolutionSummary));
         recordStatusChange(workOrder,
                 "Work order completed: " + workOrder.getResolutionSummary());
+        logTransition(workOrder, "COMPLETE", previousStatus);
         return workOrder;
     }
 
     @Transactional
     public WorkOrder cancel(UUID id, String cancellationReason) {
         WorkOrder workOrder = requireWorkOrder(id);
+        WorkOrderStatus previousStatus = workOrder.getStatus();
         translateTransitionInput(() -> workOrder.cancel(cancellationReason));
         recordStatusChange(workOrder,
                 "Work order cancelled: " + workOrder.getCancellationReason());
+        logTransition(workOrder, "CANCEL", previousStatus);
         return workOrder;
     }
 
     private void recordStatusChange(WorkOrder workOrder, String message) {
         workLogRepository.save(WorkLog.statusChange(workOrder, message));
+    }
+
+    private static void logTransition(
+            WorkOrder workOrder, String action, WorkOrderStatus previousStatus) {
+        log.info("WorkOrder transition: id={} action={} from={} to={}",
+                workOrder.getId(), action, previousStatus, workOrder.getStatus());
     }
 
     private void reassignComponent(WorkOrder workOrder, UUID componentId) {

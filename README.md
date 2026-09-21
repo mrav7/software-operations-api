@@ -81,6 +81,49 @@ Alternatively, after `./mvnw package`:
 java -jar target/software-operations-api-0.1.0-SNAPSHOT.jar
 ```
 
+### Runtime configuration
+
+The application reads its runtime configuration from environment variables. No
+database credentials or local environment values are versioned.
+
+| Variable | Required | Default | Purpose |
+|---|---:|---|---|
+| `DB_URL` | yes | none | PostgreSQL JDBC URL |
+| `DB_USERNAME` | yes | none | PostgreSQL role |
+| `DB_PASSWORD` | yes | none | PostgreSQL credential |
+| `SERVER_PORT` | no | `8080` | HTTP server port |
+| `APP_ENVIRONMENT` | no | `local` | Runtime environment label |
+| `APP_LOG_LEVEL` | no | `INFO` | Application package log level |
+
+For example, start the already packaged JAR on a different port without
+rebuilding it:
+
+```bash
+SERVER_PORT=18080 APP_ENVIRONMENT=staging APP_LOG_LEVEL=INFO \
+  java -jar target/software-operations-api-0.1.0-SNAPSHOT.jar
+```
+
+`APP_ENVIRONMENT` is an application-owned label used in the startup marker. No
+Spring profile-specific configuration files are currently required.
+
+### Health and logging
+
+Actuator exposes only health information:
+
+```bash
+curl http://localhost:8080/actuator/health
+```
+
+`status=UP` means the running application health is up. When the configured
+PostgreSQL datasource is available, `components.db.status=UP` confirms its
+health. Other Actuator endpoints are intentionally not exposed.
+
+Application logs are emitted to stdout/stderr. They include application ready,
+application shutdown, successful WorkOrder creation, successful lifecycle
+transitions, and unexpected request failures. WorkLog is the persisted,
+authoritative operational history; application logs are runtime diagnostics and
+do not replace it.
+
 ## HTTP basics
 
 Register a component:
