@@ -124,6 +124,85 @@ transitions, and unexpected request failures. WorkLog is the persisted,
 authoritative operational history; application logs are runtime diagnostics and
 do not replace it.
 
+## Docker Compose runtime
+
+The containerized runtime was tested with Docker Engine 29.8.1 and Docker
+Compose v5.5.1. It requires Docker Engine with the Compose v2-compatible CLI;
+it does not replace the native Java/PostgreSQL workflow above.
+
+Create local configuration from the public placeholders before starting:
+
+```bash
+cp .env.example .env
+```
+
+Replace the demonstration database password in `.env`. The local `.env` is
+ignored by Git, while `.env.example` contains placeholders only. Do not copy
+private host PostgreSQL credentials into it. Environment variables provide a
+reproducible local setup, not encrypted production secret management.
+
+Build the application image, create the application and PostgreSQL containers,
+and inspect their state:
+
+```bash
+docker compose config --quiet
+docker compose build
+docker compose up -d
+docker compose ps
+```
+
+The application is published on `APP_PORT` (8080 by default). Check application
+and configured datasource health with:
+
+```bash
+curl http://localhost:8080/actuator/health
+```
+
+An overall `UP` status and `components.db.status=UP` confirm the application and
+its configured PostgreSQL datasource are healthy. This is local operational
+health, not a Kubernetes or production-readiness claim.
+
+Compose captures the application's stdout/stderr streams. Inspect service logs
+and the direct Java process with:
+
+```bash
+docker compose logs -f app
+docker compose logs -f db
+docker compose top app
+```
+
+Inside the Compose project network, the application connects to `db:5432`.
+`db` is the service name resolved by Compose DNS; `localhost` inside the app
+would refer to the app container itself. PostgreSQL is not published to the
+host. The host reaches only the application through `APP_PORT`.
+
+PostgreSQL data lives in a Docker named volume. Removing and recreating the
+containers preserves that volume and its data:
+
+```bash
+docker compose down
+docker compose up -d
+```
+
+To stop services, diagnose startup, or verify PostgreSQL internally:
+
+```bash
+docker compose ps
+docker compose logs app
+docker compose logs db
+docker compose top app
+docker compose exec db pg_isready
+ss -ltn
+curl http://localhost:8080/actuator/health
+```
+
+To reset all containerized database data, use the following destructive command
+only when loss of the named PostgreSQL volume is intended:
+
+```bash
+docker compose down -v
+```
+
 ## HTTP basics
 
 Register a component:

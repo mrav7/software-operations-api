@@ -1,0 +1,48 @@
+# Git metadata
+.git/
+.gitignore
+
+# Maven / Java build output
+target/
+*.class
+
+# Local environment files
+.env
+.env.local
+.env.*
+!.env.example
+
+# IDEs and editors
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.classpath
+.project
+.settings/
+.factorypath
+out/
+
+# Local AI coordination files
+AGENTS.md
+docs/ai/
+
+# Logs and JVM diagnostics
+*.log
+hs_err_pid*
+replay_pid*
+
+# Archives and temporary files
+*.zip
+*.tar
+*.tar.gz
+*.tmp
+*.swp
+*.swo
+*~
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
