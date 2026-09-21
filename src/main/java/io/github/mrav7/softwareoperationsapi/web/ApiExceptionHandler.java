@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -91,6 +92,12 @@ class ApiExceptionHandler {
     ProblemDetail handleInactiveComponent(
             InactiveComponentException exception, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ProblemDetail handleOptimisticLockingFailure(HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT,
+                "Resource was modified concurrently; retry the request", request);
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)

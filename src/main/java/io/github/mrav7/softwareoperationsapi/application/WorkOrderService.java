@@ -46,7 +46,7 @@ public class WorkOrderService {
             WorkOrderType type,
             Priority priority,
             String targetVersion) {
-        SoftwareComponent component = requireComponent(componentId);
+        SoftwareComponent component = requireComponentForUpdate(componentId);
         requireActive(component);
 
         WorkOrder workOrder;
@@ -183,9 +183,14 @@ public class WorkOrderService {
             return;
         }
 
-        SoftwareComponent target = requireComponent(componentId);
+        SoftwareComponent target = requireComponentForUpdate(componentId);
         requireActive(target);
         workOrder.changeComponent(target);
+    }
+
+    private SoftwareComponent requireComponentForUpdate(UUID id) {
+        return componentRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Component", id));
     }
 
     private SoftwareComponent requireComponent(UUID id) {

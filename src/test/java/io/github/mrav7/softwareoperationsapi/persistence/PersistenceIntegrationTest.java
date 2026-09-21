@@ -114,8 +114,9 @@ class PersistenceIntegrationTest {
         DataIntegrityViolationException exception = assertThrows(DataIntegrityViolationException.class,
                 () -> jdbcTemplate.update("""
                         INSERT INTO work_order (
-                            id, component_id, title, type, priority, status, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            id, component_id, title, type, priority, status, version,
+                            created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                         """, workOrderId, missingComponentId, "Invalid reference",
                         "OPERATIONAL_SUPPORT", "MEDIUM", "CREATED"));
         assertEquals("23503", sqlState(exception));
@@ -134,7 +135,7 @@ class PersistenceIntegrationTest {
                 """, String.class);
 
         assertTrue(historyTableExists);
-        assertEquals("2", version);
+        assertEquals("3", version);
     }
 
     private static String sqlState(Throwable throwable) {

@@ -112,7 +112,7 @@ class WorkLogPersistenceIntegrationTest {
     }
 
     @Test
-    void flywayVersionTwoIsAppliedAndRecorded() {
+    void latestFlywayVersionIsAppliedAndRecorded() {
         Boolean historyTableExists = jdbcTemplate.queryForObject(
                 "SELECT to_regclass('public.flyway_schema_history') IS NOT NULL", Boolean.class);
         String version = jdbcTemplate.queryForObject("""
@@ -124,7 +124,7 @@ class WorkLogPersistenceIntegrationTest {
                 """, String.class);
 
         assertTrue(historyTableExists);
-        assertEquals("2", version);
+        assertEquals("3", version);
     }
 
     private void cleanDatabase() {

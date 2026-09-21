@@ -78,7 +78,7 @@ public class SoftwareComponentService {
 
     @Transactional
     public SoftwareComponent deactivate(UUID id) {
-        SoftwareComponent component = requireComponent(id);
+        SoftwareComponent component = requireComponentForUpdate(id);
         if (!component.isActive()) {
             return component;
         }
@@ -88,6 +88,11 @@ public class SoftwareComponentService {
 
         component.deactivate();
         return component;
+    }
+
+    private SoftwareComponent requireComponentForUpdate(UUID id) {
+        return componentRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Component", id));
     }
 
     private SoftwareComponent requireComponent(UUID id) {

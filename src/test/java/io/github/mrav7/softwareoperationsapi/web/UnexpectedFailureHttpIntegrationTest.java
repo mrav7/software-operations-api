@@ -10,6 +10,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.stereotype.Controller;
 import org.springframework.test.web.servlet.MockMvc;
@@ -49,6 +50,22 @@ class UnexpectedFailureHttpIntegrationTest {
         assertTrue(output.getOut().contains("test-only internal detail"));
     }
 
+    @Test
+    void optimisticLockingFailureIsReturnedAsSanitizedConflict() throws Exception {
+        MockHttpServletResponse response = mvc.perform(get("/test-support/optimistic-conflict"))
+                .andReturn().getResponse();
+
+        assertEquals(409, response.getStatus());
+        assertTrue(response.getContentType().startsWith("application/problem+json"));
+        JsonNode problem = json.readTree(response.getContentAsString());
+        assertEquals(409, problem.get("status").asInt());
+        assertEquals("Conflict", problem.get("title").asString());
+        assertEquals("Resource was modified concurrently; retry the request",
+                problem.get("detail").asString());
+        assertEquals("/test-support/optimistic-conflict", problem.get("instance").asString());
+        assertFalse(response.getContentAsString().contains("stale version 7"));
+    }
+
     @TestConfiguration(proxyBeanMethods = false)
     static class ThrowingControllerConfiguration {
         @Bean
@@ -62,6 +79,11 @@ class UnexpectedFailureHttpIntegrationTest {
         @GetMapping("/test-support/unexpected-failure")
         void throwUnexpectedly() {
             throw new IllegalStateException("test-only internal detail");
+        }
+
+        @GetMapping("/test-support/optimistic-conflict")
+        void throwOptimisticLockingFailure() {
+            throw new OptimisticLockingFailureException("stale version 7");
         }
     }
 }

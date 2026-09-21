@@ -24,18 +24,42 @@ The Maven version output should identify Maven 3.9.16 and Temurin Java 25.0.4.1.
 The included Apache Maven Wrapper 3.3.4 downloads the configured Maven version;
 a global Maven installation is unnecessary.
 
+### Native PostgreSQL preparation
+
+Native execution requires a PostgreSQL 18 server, an application role, a
+development database, and a separate integration-test database. For example,
+run the following with a PostgreSQL administrative role:
+
+```sql
+CREATE ROLE software_operations_api_app
+    LOGIN
+    PASSWORD 'change-me';
+
+CREATE DATABASE software_operations_api_dev
+    OWNER software_operations_api_app;
+
+CREATE DATABASE software_operations_api_test
+    OWNER software_operations_api_app;
+```
+
+`change-me` is a public placeholder and must be replaced locally. Equivalent
+role and database names are valid, but the integration-test database name must
+end with `_test`.
+
 ## Build
 
 Configure the dedicated PostgreSQL test database before running the test suite:
 
 ```bash
 export TEST_DB_URL=jdbc:postgresql://127.0.0.1:5432/software_operations_api_test
-export TEST_DB_USERNAME=app_user
+export TEST_DB_USERNAME=software_operations_api_app
 export TEST_DB_PASSWORD=change-me
 ```
 
-Use credentials for a test-only database; tests must not target the development
-database. From the repository root:
+The integration suite queries `SELECT current_database()` during Spring context
+initialization and refuses to run unless the actual connected database name ends
+with `_test`. This guard runs before destructive test cleanup; tests must never
+target the development database. From the repository root:
 
 ```bash
 ./mvnw test
@@ -49,13 +73,10 @@ For builds starting without previous generated output:
 ./mvnw clean package
 ```
 
-`test` compiles sources and runs the domain, Spring HTTP-boundary, and PostgreSQL
-persistence tests. The domain tests protect pure-Java domain construction, the
-WorkOrder lifecycle and invariants, blocking, terminal states, deployment
-requirements, and progressive immutability. Web tests verify registration,
-creation, retrieval, and domain integration. Persistence tests verify JPA
-round-trips and relational constraints against PostgreSQL. `package` also
-creates an executable Spring Boot JAR under `target/`.
+`test` compiles sources and runs domain, application/service, PostgreSQL
+persistence, transaction/rollback, HTTP-boundary, configuration, health,
+logging, test-safety, and concurrency tests. `package` also creates an
+executable Spring Boot JAR under `target/`.
 
 ## Run
 
@@ -63,7 +84,7 @@ Configure the application datasource before startup:
 
 ```bash
 export DB_URL=jdbc:postgresql://127.0.0.1:5432/software_operations_api_dev
-export DB_USERNAME=app_user
+export DB_USERNAME=software_operations_api_app
 export DB_PASSWORD=change-me
 ```
 
@@ -80,6 +101,9 @@ Alternatively, after `./mvnw package`:
 ```bash
 java -jar target/software-operations-api-0.1.0-SNAPSHOT.jar
 ```
+
+Stop native execution with `Ctrl-C`; Spring handles the termination signal and
+shuts the application down cleanly.
 
 ### Runtime configuration
 
@@ -123,6 +147,13 @@ application shutdown, successful WorkOrder creation, successful lifecycle
 transitions, and unexpected request failures. WorkLog is the persisted,
 authoritative operational history; application logs are runtime diagnostics and
 do not replace it.
+
+### Native verification sequence
+
+For a fresh native setup: provision PostgreSQL as above, configure `TEST_DB_*`,
+run `./mvnw --batch-mode --no-transfer-progress clean verify`, configure
+`DB_*`, start the application, wait for Flyway and startup to complete, check
+`/actuator/health`, exercise the API, and stop the process with `Ctrl-C`.
 
 ## Docker Compose runtime
 
@@ -341,6 +372,18 @@ component must exist and be active. Status is never directly editable and must
 change through the explicit lifecycle endpoint. `COMPLETED` and `CANCELLED` are
 terminal states.
 
+### Concurrent writes
+
+Mutable SoftwareComponent and WorkOrder rows use optimistic locking, so a stale
+conflicting write is rejected instead of silently overwriting a committed
+change. HTTP-level optimistic conflicts return `409 Conflict`; persistence
+versions are internal and are not exposed in requests or responses.
+
+WorkOrder creation, reassignment to a different component, and component
+deactivation coordinate through a transaction-scoped row lock on the affected
+SoftwareComponent. This protects the active-component/active-work invariant
+without globally serializing requests or automatically retrying stale work.
+
 ### Operational notes
 
 A WorkOrder represents current operational state. WorkLog entries represent
@@ -391,7 +434,8 @@ Errors use `application/problem+json`:
 - `404 Not Found`: unknown component or WorkOrder.
 - `409 Conflict`: lifecycle action incompatible with the WorkOrder state,
   duplicate component name, inactive component selected for creation or
-  reassignment, or component deactivation blocked by active work.
+  reassignment, component deactivation blocked by active work, or a stale
+  concurrent write.
 
 For example, a blank required field returns a ProblemDetail response with an
 `errors` list. The API does not expose direct status editing.
@@ -406,8 +450,21 @@ is retained.
 Write use cases execute within Spring transaction boundaries over PostgreSQL.
 Existing managed entities are persisted through JPA dirty checking at commit.
 
+## v1 limitations
+
+- No authentication, authorization, user identity, or RBAC model.
+- No deployment/CD automation or distributed deployment coordination.
+- No external observability stack beyond application logs and Actuator health.
+- No client-visible version, ETag, or `If-Match` concurrency protocol.
+- Runtime logs are diagnostic; PostgreSQL state and persisted WorkLog history
+  are authoritative. A success log can be emitted inside a transaction before
+  its final commit, without implying that rolled-back data was persisted.
+
 ## Source layout
 
 - `src/main/java/` contains application source code.
-- `src/test/java/` contains domain unit tests and Spring HTTP-boundary tests.
+- `src/main/resources/` contains application configuration and Flyway migrations.
+- `src/test/java/` contains domain, application/service, PostgreSQL persistence,
+  transaction/rollback, HTTP-boundary, configuration/health/logging,
+  test-safety, and concurrency tests.
 - `target/` contains generated build output and is ignored by Git.

@@ -16,6 +16,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 @Entity
 @Table(name = "work_order")
@@ -45,6 +46,10 @@ public class WorkOrder {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private WorkOrderStatus status;
+
+    @Version
+    @Column(nullable = false)
+    private long version;
 
     @Column(name = "target_version", columnDefinition = "text")
     private String targetVersion;
