@@ -2,6 +2,8 @@ package io.github.mrav7.softwareoperationsapi.domain;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -12,6 +14,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 
 @Entity
@@ -72,6 +75,9 @@ public class WorkOrder {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    @OneToMany(mappedBy = "workOrder")
+    private List<WorkLog> logs = new ArrayList<>();
 
     protected WorkOrder() {
     }
@@ -404,6 +410,18 @@ public class WorkOrder {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public List<WorkLog> getLogs() {
+        return List.copyOf(logs);
+    }
+
+    void addLog(WorkLog log) {
+        WorkLog requiredLog = Objects.requireNonNull(log, "log must not be null");
+        if (requiredLog.getWorkOrder() != this) {
+            throw new IllegalArgumentException("log must belong to this work order");
+        }
+        logs.add(requiredLog);
     }
 
     private void requireStatus(WorkOrderStatus requiredStatus, String operation) {
