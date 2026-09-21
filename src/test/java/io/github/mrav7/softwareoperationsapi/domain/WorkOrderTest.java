@@ -75,6 +75,18 @@ class WorkOrderTest {
                     null));
         }
 
+        @ParameterizedTest
+        @ValueSource(strings = {"", " ", "   ", "\t"})
+        void titleMustNotBeBlank(String title) {
+            assertThrows(IllegalArgumentException.class, () -> new WorkOrder(
+                    component("configuration-service"),
+                    title,
+                    null,
+                    WorkOrderType.CORRECTIVE_MAINTENANCE,
+                    Priority.HIGH,
+                    null));
+        }
+
         @Test
         void typeIsRequired() {
             assertThrows(NullPointerException.class, () -> new WorkOrder(
@@ -459,6 +471,56 @@ class WorkOrderTest {
 
             assertEquals("2.4.2", workOrder.getTargetVersion());
         }
+
+        @Test
+        void typeAndTargetVersionCanChangeTogetherToValidDeploymentPair() {
+            WorkOrder workOrder = newWorkOrder();
+
+            workOrder.changeTypeAndTargetVersion(WorkOrderType.DEPLOYMENT, "2.4.0");
+
+            assertEquals(WorkOrderType.DEPLOYMENT, workOrder.getType());
+            assertEquals("2.4.0", workOrder.getTargetVersion());
+        }
+
+        @Test
+        void typeAndTargetVersionCanChangeTogetherAwayFromDeploymentAndClearTarget() {
+            WorkOrder workOrder = deploymentWorkOrder("2.4.0");
+
+            workOrder.changeTypeAndTargetVersion(WorkOrderType.CORRECTIVE_MAINTENANCE, null);
+
+            assertEquals(WorkOrderType.CORRECTIVE_MAINTENANCE, workOrder.getType());
+            assertNull(workOrder.getTargetVersion());
+        }
+
+        @Test
+        void combinedDeploymentChangeRejectsNullTargetWithoutPartialMutation() {
+            WorkOrder workOrder = newWorkOrder();
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> workOrder.changeTypeAndTargetVersion(WorkOrderType.DEPLOYMENT, null));
+
+            assertEquals(WorkOrderType.CORRECTIVE_MAINTENANCE, workOrder.getType());
+            assertNull(workOrder.getTargetVersion());
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"", " ", "   ", "\t"})
+        void combinedDeploymentChangeRejectsBlankTarget(String targetVersion) {
+            WorkOrder workOrder = newWorkOrder();
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> workOrder.changeTypeAndTargetVersion(
+                            WorkOrderType.DEPLOYMENT, targetVersion));
+        }
+
+        @Test
+        void combinedTypeAndTargetChangeIsCreatedOnly() {
+            WorkOrder workOrder = plannedWorkOrder();
+
+            assertThrows(InvalidWorkOrderStateException.class,
+                    () -> workOrder.changeTypeAndTargetVersion(
+                            WorkOrderType.DEPLOYMENT, "2.4.0"));
+        }
     }
 
     @Nested
@@ -515,6 +577,14 @@ class WorkOrderTest {
             workOrder.changeTitle("Updated title");
 
             assertEquals("Updated title", workOrder.getTitle());
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"", " ", "   ", "\t"})
+        void titleChangeRejectsBlankValue(String title) {
+            WorkOrder workOrder = newWorkOrder();
+
+            assertThrows(IllegalArgumentException.class, () -> workOrder.changeTitle(title));
         }
 
         @ParameterizedTest

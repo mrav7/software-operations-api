@@ -76,6 +76,20 @@ class ErrorContractTest {
                 .andReturn().getResponse(), 400, "Bad Request",
                 "Request body is malformed or contains an invalid value", "/api/components");
 
+        String orderId = createWorkOrder();
+        assertProblem(mvc.perform(patch("/api/work-orders/{id}", orderId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"componentId\":\"not-a-uuid\"}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "Request body is malformed or contains an invalid value",
+                "/api/work-orders/" + orderId);
+        assertProblem(mvc.perform(patch("/api/work-orders/{id}", orderId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"UNKNOWN\"}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "Request body is malformed or contains an invalid value",
+                "/api/work-orders/" + orderId);
+
         assertProblem(mvc.perform(get("/api/work-orders/not-a-uuid"))
                 .andReturn().getResponse(), 400, "Bad Request",
                 "Request parameter is invalid", "/api/work-orders/not-a-uuid");
@@ -251,6 +265,100 @@ class ErrorContractTest {
                 "/api/components/" + missing + "/deactivation");
     }
 
+    @Test
+    void workOrderPatchRejectsForbiddenUnknownAndEmptyRequests() throws Exception {
+        String orderId = createWorkOrder();
+        String path = "/api/work-orders/" + orderId;
+
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"COMPLETED\"}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "Work order update contains unsupported fields: status", path);
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"unknownField\":\"x\"}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "Work order update contains unsupported fields: unknownField", path);
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "At least one work order field must be provided", path);
+    }
+
+    @Test
+    void workOrderPatchRejectsNullRequiredFieldsAndBlankTitle() throws Exception {
+        String orderId = createWorkOrder();
+        String path = "/api/work-orders/" + orderId;
+
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"componentId\":null}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "componentId must not be null", path);
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":null}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "type must not be null", path);
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":null}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "title must not be null", path);
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"   \"}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "title must not be blank", path);
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"priority\":null}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "priority must not be null", path);
+    }
+
+    @Test
+    void workOrderReassignmentUsesNotFoundInactiveAndLifecycleConflicts() throws Exception {
+        String originalComponentId = createComponent("original-reassignment-service");
+        String orderId = createWorkOrder(originalComponentId);
+        UUID missingTarget = UUID.randomUUID();
+        String path = "/api/work-orders/" + orderId;
+
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"componentId\":\"" + missingTarget + "\"}"))
+                .andReturn().getResponse(), 404, "Not Found",
+                "Component " + missingTarget + " was not found", path);
+
+        String inactiveTarget = createComponent("inactive-reassignment-target");
+        jdbcTemplate.update("UPDATE software_component SET active = FALSE WHERE id = ?",
+                UUID.fromString(inactiveTarget));
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"componentId\":\"" + inactiveTarget + "\"}"))
+                .andReturn().getResponse(), 409, "Conflict",
+                "Component " + inactiveTarget + " is inactive", path);
+
+        String activeTarget = createComponent("active-reassignment-target");
+        MockHttpServletResponse planned = mvc.perform(
+                post("/api/work-orders/{id}/transitions", orderId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"action\":\"PLAN\"}"))
+                .andReturn().getResponse();
+        assertEquals(200, planned.getStatus());
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"componentId\":\"" + activeTarget + "\"}"))
+                .andReturn().getResponse(), 409, "Conflict",
+                "Cannot change component work order while status is PLANNED", path);
+    }
+
+    @Test
+    void invalidCombinedDeploymentPatchUsesBadRequestProblemDetail() throws Exception {
+        String orderId = createWorkOrder();
+        String path = "/api/work-orders/" + orderId;
+
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"DEPLOYMENT\",\"targetVersion\":null}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "targetVersion must not be null or blank for deployment", path);
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"DEPLOYMENT\",\"targetVersion\":\"   \"}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "targetVersion must not be null or blank for deployment", path);
+    }
+
     private JsonNode assertProblem(MockHttpServletResponse response, int status, String title,
             String detail, String instance) throws Exception {
         assertEquals(status, response.getStatus());
@@ -277,6 +385,10 @@ class ErrorContractTest {
 
     private String createWorkOrder() throws Exception {
         String componentId = createComponent();
+        return createWorkOrder(componentId);
+    }
+
+    private String createWorkOrder(String componentId) throws Exception {
         return json.readTree(mvc.perform(post("/api/work-orders").contentType(MediaType.APPLICATION_JSON)
                 .content(workOrderRequest(componentId, "CORRECTIVE_MAINTENANCE", "null")))
                 .andReturn().getResponse().getContentAsString()).get("id").asString();

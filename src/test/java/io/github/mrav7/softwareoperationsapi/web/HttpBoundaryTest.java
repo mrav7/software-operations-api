@@ -161,6 +161,64 @@ class HttpBoundaryTest {
     }
 
     @Test
+    void workOrderPatchPersistsEditableFieldsIncludingNullDescription() throws Exception {
+        String orderId = createCorrectiveWorkOrder();
+
+        MockHttpServletResponse response = mvc.perform(patch("/api/work-orders/{id}", orderId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"title":"Updated investigation","description":null,"priority":"CRITICAL"}
+                        """))
+                .andReturn().getResponse();
+
+        assertEquals(200, response.getStatus());
+        JsonNode body = json.readTree(response.getContentAsString());
+        assertEquals("Updated investigation", body.get("title").asString());
+        assertTrue(body.get("description").isNull());
+        assertEquals("CRITICAL", body.get("priority").asString());
+        assertEquals("Updated investigation", workOrderRepository.findById(UUID.fromString(orderId))
+                .orElseThrow().getTitle());
+        assertNull(workOrderRepository.findById(UUID.fromString(orderId))
+                .orElseThrow().getDescription());
+    }
+
+    @Test
+    void createdWorkOrderCanBeReassignedToActiveComponent() throws Exception {
+        String originalComponentId = json.readTree(createComponent("original-service", "Original")
+                .getContentAsString()).get("id").asString();
+        String targetComponentId = json.readTree(createComponent("target-service", "Target")
+                .getContentAsString()).get("id").asString();
+        String orderId = createCorrectiveWorkOrder(originalComponentId);
+
+        MockHttpServletResponse response = mvc.perform(patch("/api/work-orders/{id}", orderId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"componentId\":\"" + targetComponentId + "\"}"))
+                .andReturn().getResponse();
+
+        assertEquals(200, response.getStatus());
+        assertEquals(targetComponentId,
+                json.readTree(response.getContentAsString()).get("componentId").asString());
+        assertEquals(UUID.fromString(targetComponentId),
+                workOrderRepository.findById(UUID.fromString(orderId))
+                        .orElseThrow().getComponent().getId());
+    }
+
+    @Test
+    void combinedTypeAndTargetVersionPatchUsesValidFinalState() throws Exception {
+        String orderId = createCorrectiveWorkOrder();
+
+        MockHttpServletResponse response = mvc.perform(patch("/api/work-orders/{id}", orderId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"type\":\"DEPLOYMENT\",\"targetVersion\":\"2.4.0\"}"))
+                .andReturn().getResponse();
+
+        assertEquals(200, response.getStatus());
+        JsonNode body = json.readTree(response.getContentAsString());
+        assertEquals("DEPLOYMENT", body.get("type").asString());
+        assertEquals("2.4.0", body.get("targetVersion").asString());
+    }
+
+    @Test
     void unknownIdsDoNotPreventSubsequentRequests() throws Exception {
         UUID missingId = UUID.randomUUID();
         assertEquals(404, mvc.perform(get("/api/components/{id}", missingId))
@@ -242,6 +300,10 @@ class HttpBoundaryTest {
     private String createCorrectiveWorkOrder() throws Exception {
         String componentId = json.readTree(createComponent().getContentAsString())
                 .get("id").asString();
+        return createCorrectiveWorkOrder(componentId);
+    }
+
+    private String createCorrectiveWorkOrder(String componentId) throws Exception {
         MockHttpServletResponse response = mvc.perform(post("/api/work-orders")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(workOrderRequest(componentId, "null").replace(

@@ -98,7 +98,8 @@ public class WorkOrder {
             String targetVersion) {
         this.id = UUID.randomUUID();
         this.component = Objects.requireNonNull(component, "component must not be null");
-        this.title = Objects.requireNonNull(title, "title must not be null");
+        requireNonBlank(title, "title");
+        this.title = title;
         this.description = description;
         WorkOrderType requiredType = Objects.requireNonNull(type, "type must not be null");
         validateDeploymentTarget(requiredType, targetVersion);
@@ -256,14 +257,34 @@ public class WorkOrder {
     }
 
     /**
+     * Changes type and target version together while this work order is {@code CREATED}.
+     * The final pair is validated before either field changes.
+     *
+     * @param type the new type; must not be null
+     * @param targetVersion the new target version; deployment requires a non-blank value
+     * @throws InvalidWorkOrderStateException if the current status is not {@code CREATED}
+     * @throws IllegalArgumentException if the final deployment pair has no valid target version
+     */
+    public void changeTypeAndTargetVersion(WorkOrderType type, String targetVersion) {
+        requireStatus(WorkOrderStatus.CREATED, "change type and target version");
+        WorkOrderType requiredType = Objects.requireNonNull(type, "type must not be null");
+        validateDeploymentTarget(requiredType, targetVersion);
+
+        Instant now = now();
+        this.type = requiredType;
+        this.targetVersion = targetVersion;
+        this.updatedAt = now;
+    }
+
+    /**
      * Changes the title while this work order is {@code CREATED} or {@code PLANNED}.
      *
-     * @param title the new title; must not be null
+     * @param title the new title; must not be null or blank
      * @throws InvalidWorkOrderStateException if the current status is not editable
      */
     public void changeTitle(String title) {
         requireCreatedOrPlanned("change title");
-        Objects.requireNonNull(title, "title must not be null");
+        requireNonBlank(title, "title");
 
         Instant now = now();
         this.title = title;

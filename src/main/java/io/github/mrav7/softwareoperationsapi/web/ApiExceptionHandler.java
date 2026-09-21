@@ -16,6 +16,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import io.github.mrav7.softwareoperationsapi.application.ComponentHasActiveWorkException;
 import io.github.mrav7.softwareoperationsapi.application.ComponentNameConflictException;
+import io.github.mrav7.softwareoperationsapi.application.InactiveComponentException;
 import io.github.mrav7.softwareoperationsapi.application.InvalidDomainInputException;
 import io.github.mrav7.softwareoperationsapi.application.ResourceNotFoundException;
 import io.github.mrav7.softwareoperationsapi.domain.InvalidWorkOrderStateException;
