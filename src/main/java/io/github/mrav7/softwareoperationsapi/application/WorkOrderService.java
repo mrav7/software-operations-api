@@ -8,21 +8,26 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.github.mrav7.softwareoperationsapi.domain.Priority;
 import io.github.mrav7.softwareoperationsapi.domain.SoftwareComponent;
+import io.github.mrav7.softwareoperationsapi.domain.WorkLog;
 import io.github.mrav7.softwareoperationsapi.domain.WorkOrder;
 import io.github.mrav7.softwareoperationsapi.domain.WorkOrderType;
 import io.github.mrav7.softwareoperationsapi.persistence.SoftwareComponentRepository;
+import io.github.mrav7.softwareoperationsapi.persistence.WorkLogRepository;
 import io.github.mrav7.softwareoperationsapi.persistence.WorkOrderRepository;
 
 @Service
 public class WorkOrderService {
     private final SoftwareComponentRepository componentRepository;
     private final WorkOrderRepository workOrderRepository;
+    private final WorkLogRepository workLogRepository;
 
     public WorkOrderService(
             SoftwareComponentRepository componentRepository,
-            WorkOrderRepository workOrderRepository) {
+            WorkOrderRepository workOrderRepository,
+            WorkLogRepository workLogRepository) {
         this.componentRepository = componentRepository;
         this.workOrderRepository = workOrderRepository;
+        this.workLogRepository = workLogRepository;
     }
 
     @Transactional
@@ -82,6 +87,7 @@ public class WorkOrderService {
     public WorkOrder plan(UUID id) {
         WorkOrder workOrder = requireWorkOrder(id);
         workOrder.plan();
+        recordStatusChange(workOrder, "Work order planned.");
         return workOrder;
     }
 
@@ -89,6 +95,7 @@ public class WorkOrderService {
     public WorkOrder start(UUID id) {
         WorkOrder workOrder = requireWorkOrder(id);
         workOrder.start();
+        recordStatusChange(workOrder, "Work order started.");
         return workOrder;
     }
 
@@ -96,6 +103,8 @@ public class WorkOrderService {
     public WorkOrder block(UUID id, String blockingReason) {
         WorkOrder workOrder = requireWorkOrder(id);
         translateTransitionInput(() -> workOrder.block(blockingReason));
+        recordStatusChange(workOrder,
+                "Work order blocked: " + workOrder.getBlockingReason());
         return workOrder;
     }
 
@@ -103,6 +112,7 @@ public class WorkOrderService {
     public WorkOrder resume(UUID id) {
         WorkOrder workOrder = requireWorkOrder(id);
         workOrder.resume();
+        recordStatusChange(workOrder, "Work order resumed.");
         return workOrder;
     }
 
@@ -110,6 +120,8 @@ public class WorkOrderService {
     public WorkOrder complete(UUID id, String resolutionSummary) {
         WorkOrder workOrder = requireWorkOrder(id);
         translateTransitionInput(() -> workOrder.complete(resolutionSummary));
+        recordStatusChange(workOrder,
+                "Work order completed: " + workOrder.getResolutionSummary());
         return workOrder;
     }
 
@@ -117,7 +129,13 @@ public class WorkOrderService {
     public WorkOrder cancel(UUID id, String cancellationReason) {
         WorkOrder workOrder = requireWorkOrder(id);
         translateTransitionInput(() -> workOrder.cancel(cancellationReason));
+        recordStatusChange(workOrder,
+                "Work order cancelled: " + workOrder.getCancellationReason());
         return workOrder;
+    }
+
+    private void recordStatusChange(WorkOrder workOrder, String message) {
+        workLogRepository.save(WorkLog.statusChange(workOrder, message));
     }
 
     private void reassignComponent(WorkOrder workOrder, UUID componentId) {

@@ -14,6 +14,7 @@ import io.github.mrav7.softwareoperationsapi.domain.WorkOrder;
 import io.github.mrav7.softwareoperationsapi.domain.WorkOrderStatus;
 import io.github.mrav7.softwareoperationsapi.domain.WorkOrderType;
 import io.github.mrav7.softwareoperationsapi.persistence.SoftwareComponentRepository;
+import io.github.mrav7.softwareoperationsapi.persistence.WorkLogRepository;
 import io.github.mrav7.softwareoperationsapi.persistence.WorkOrderRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,8 +31,12 @@ class TransactionRollbackIntegrationTest {
     @Autowired
     private WorkOrderRepository workOrderRepository;
 
+    @Autowired
+    private WorkLogRepository workLogRepository;
+
     @BeforeEach
     void cleanDatabase() {
+        workLogRepository.deleteAll();
         workOrderRepository.deleteAll();
         componentRepository.deleteAll();
     }

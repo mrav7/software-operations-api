@@ -171,10 +171,18 @@ curl http://localhost:8080/api/work-orders/WORK_ORDER_ID/logs
 
 Manual creation always produces a `NOTE`; the entry ID, type, creation time,
 and WorkOrder association are server controlled. `STATUS_CHANGE` is reserved
-for system-controlled history and cannot be selected by clients. Listing
-returns the oldest entries first. Manual notes are also allowed after a
-WorkOrder reaches `COMPLETED` or `CANCELLED`, and adding one does not change the
-WorkOrder's current status or `updatedAt` value.
+for system-controlled history and cannot be selected by clients. Successful
+`PLAN`, `START`, `BLOCK`, `RESUME`, `COMPLETE`, and `CANCEL` operations each
+append one `STATUS_CHANGE`; creation and generic PATCH updates do not. Manual
+notes and automatic status changes appear in one oldest-first timeline.
+
+Manual notes are also allowed after a WorkOrder reaches `COMPLETED` or
+`CANCELLED`, and adding one does not change the WorkOrder's current status or
+`updatedAt` value. While blocked, the WorkOrder exposes the current
+`blockingReason` and `blockedAt`. Resuming clears that current snapshot, while
+the earlier BLOCK entry remains in WorkLog history. The lifecycle mutation and
+its automatic `STATUS_CHANGE` persistence execute in the same application
+transaction.
 
 ## Lifecycle transitions and errors
 

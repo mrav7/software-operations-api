@@ -209,12 +209,18 @@ class WorkOrderController {
     public record WorkOrderResponse(
             UUID id, UUID componentId, String title, String description,
             WorkOrderType type, Priority priority, WorkOrderStatus status,
-            String targetVersion, Instant createdAt, Instant updatedAt) {
+            String targetVersion, String blockingReason, Instant blockedAt,
+            String resolutionSummary, String cancellationReason,
+            Instant createdAt, Instant plannedAt, Instant startedAt,
+            Instant completedAt, Instant updatedAt) {
         static WorkOrderResponse from(WorkOrder workOrder) {
             return new WorkOrderResponse(workOrder.getId(), workOrder.getComponent().getId(),
                     workOrder.getTitle(), workOrder.getDescription(), workOrder.getType(),
                     workOrder.getPriority(), workOrder.getStatus(), workOrder.getTargetVersion(),
-                    workOrder.getCreatedAt(), workOrder.getUpdatedAt());
+                    workOrder.getBlockingReason(), workOrder.getBlockedAt(),
+                    workOrder.getResolutionSummary(), workOrder.getCancellationReason(),
+                    workOrder.getCreatedAt(), workOrder.getPlannedAt(), workOrder.getStartedAt(),
+                    workOrder.getCompletedAt(), workOrder.getUpdatedAt());
         }
     }
 }

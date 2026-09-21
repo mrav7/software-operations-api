@@ -14,6 +14,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import io.github.mrav7.softwareoperationsapi.persistence.SoftwareComponentRepository;
+import io.github.mrav7.softwareoperationsapi.persistence.WorkLogRepository;
 import io.github.mrav7.softwareoperationsapi.persistence.WorkOrderRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -40,8 +41,12 @@ class HttpBoundaryTest {
     @Autowired
     private WorkOrderRepository workOrderRepository;
 
+    @Autowired
+    private WorkLogRepository workLogRepository;
+
     @BeforeEach
     void cleanDatabase() {
+        workLogRepository.deleteAll();
         workOrderRepository.deleteAll();
         componentRepository.deleteAll();
     }
