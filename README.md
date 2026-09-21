@@ -155,6 +155,27 @@ component must exist and be active. Status is never directly editable and must
 change through the explicit lifecycle endpoint. `COMPLETED` and `CANCELLED` are
 terminal states.
 
+### Operational notes
+
+A WorkOrder represents current operational state. WorkLog entries represent
+historical operational information associated with that WorkOrder. Add a manual
+note and list its history with:
+
+```bash
+curl -i -H 'Content-Type: application/json' \
+  -d '{"message":"Investigated the database timeout"}' \
+  http://localhost:8080/api/work-orders/WORK_ORDER_ID/logs
+
+curl http://localhost:8080/api/work-orders/WORK_ORDER_ID/logs
+```
+
+Manual creation always produces a `NOTE`; the entry ID, type, creation time,
+and WorkOrder association are server controlled. `STATUS_CHANGE` is reserved
+for system-controlled history and cannot be selected by clients. Listing
+returns the oldest entries first. Manual notes are also allowed after a
+WorkOrder reaches `COMPLETED` or `CANCELLED`, and adding one does not change the
+WorkOrder's current status or `updatedAt` value.
+
 ## Lifecycle transitions and errors
 
 Use an explicit action to change a WorkOrder lifecycle state:
