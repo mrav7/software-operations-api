@@ -19,8 +19,10 @@ import io.github.mrav7.softwareoperationsapi.persistence.WorkOrderRepository;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 @SpringBootTest
@@ -63,6 +65,71 @@ class HttpBoundaryTest {
         assertEquals(200, retrieved.getStatus());
         assertTrue(retrieved.getContentType().startsWith(MediaType.APPLICATION_JSON_VALUE));
         assertEquals(body, json.readTree(retrieved.getContentAsString()));
+    }
+
+    @Test
+    void persistedComponentsCanBeListedWithoutRelyingOnDatabaseOrder() throws Exception {
+        String firstId = json.readTree(createComponent("alpha-service", "Alpha")
+                .getContentAsString()).get("id").asString();
+        String secondId = json.readTree(createComponent("beta-service", "Beta")
+                .getContentAsString()).get("id").asString();
+
+        MockHttpServletResponse response = mvc.perform(get("/api/components"))
+                .andReturn().getResponse();
+
+        assertEquals(200, response.getStatus());
+        JsonNode body = json.readTree(response.getContentAsString());
+        assertEquals(2, body.size());
+        assertTrue(containsId(body, firstId));
+        assertTrue(containsId(body, secondId));
+    }
+
+    @Test
+    void componentNamePatchPersists() throws Exception {
+        String componentId = json.readTree(createComponent().getContentAsString())
+                .get("id").asString();
+
+        MockHttpServletResponse response = mvc.perform(patch("/api/components/{id}", componentId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"renamed-service\"}"))
+                .andReturn().getResponse();
+
+        assertEquals(200, response.getStatus());
+        assertEquals("renamed-service",
+                json.readTree(response.getContentAsString()).get("name").asString());
+        assertEquals("renamed-service", componentRepository.findById(UUID.fromString(componentId))
+                .orElseThrow().getName());
+    }
+
+    @Test
+    void explicitNullDescriptionPatchClearsPersistedDescription() throws Exception {
+        String componentId = json.readTree(createComponent().getContentAsString())
+                .get("id").asString();
+
+        MockHttpServletResponse response = mvc.perform(patch("/api/components/{id}", componentId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"description\":null}"))
+                .andReturn().getResponse();
+
+        assertEquals(200, response.getStatus());
+        assertTrue(json.readTree(response.getContentAsString()).get("description").isNull());
+        assertNull(componentRepository.findById(UUID.fromString(componentId))
+                .orElseThrow().getDescription());
+    }
+
+    @Test
+    void componentWithoutActiveWorkCanBeDeactivated() throws Exception {
+        String componentId = json.readTree(createComponent().getContentAsString())
+                .get("id").asString();
+
+        MockHttpServletResponse response = mvc.perform(
+                post("/api/components/{id}/deactivation", componentId))
+                .andReturn().getResponse();
+
+        assertEquals(200, response.getStatus());
+        assertFalse(json.readTree(response.getContentAsString()).get("active").asBoolean());
+        assertFalse(componentRepository.findById(UUID.fromString(componentId))
+                .orElseThrow().isActive());
     }
 
     @Test
@@ -152,11 +219,24 @@ class HttpBoundaryTest {
     }
 
     private MockHttpServletResponse createComponent() throws Exception {
+        return createComponent("configuration-service", "Configuration API");
+    }
+
+    private MockHttpServletResponse createComponent(String name, String description) throws Exception {
         return mvc.perform(post("/api/components").contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"name":"configuration-service","description":"Configuration API"}
-                        """))
+                        {"name":"%s","description":"%s"}
+                        """.formatted(name, description)))
                 .andReturn().getResponse();
+    }
+
+    private static boolean containsId(JsonNode components, String id) {
+        for (JsonNode component : components) {
+            if (id.equals(component.get("id").asString())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String createCorrectiveWorkOrder() throws Exception {

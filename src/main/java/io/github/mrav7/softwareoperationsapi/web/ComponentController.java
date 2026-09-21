@@ -1,83 +1,127 @@
 package io.github.mrav7.softwareoperationsapi.web;
 
 import java.net.URI;
-import java.sql.SQLException;
 import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonSetter;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import org.hibernate.exception.ConstraintViolationException;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import io.github.mrav7.softwareoperationsapi.application.InvalidDomainInputException;
+import io.github.mrav7.softwareoperationsapi.application.SoftwareComponentService;
+import io.github.mrav7.softwareoperationsapi.application.UpdateSoftwareComponentCommand;
 import io.github.mrav7.softwareoperationsapi.domain.SoftwareComponent;
-import io.github.mrav7.softwareoperationsapi.persistence.SoftwareComponentRepository;
 
 @RestController
 @RequestMapping("/api/components")
 class ComponentController {
-    private static final String UNIQUE_VIOLATION_SQL_STATE = "23505";
-    private static final String COMPONENT_NAME_CONSTRAINT = "uk_software_component_name";
+    private final SoftwareComponentService componentService;
 
-    private final SoftwareComponentRepository componentRepository;
-
-    ComponentController(SoftwareComponentRepository componentRepository) {
-        this.componentRepository = componentRepository;
+    ComponentController(SoftwareComponentService componentService) {
+        this.componentService = componentService;
     }
 
     @PostMapping
-    ResponseEntity<ComponentResponse> create(@Valid @RequestBody CreateComponentRequest request) {
-        if (componentRepository.existsByName(request.name())) {
-            throw new ComponentNameConflictException();
-        }
-
-        SoftwareComponent component = new SoftwareComponent(request.name(), request.description());
-        SoftwareComponent persisted;
-        try {
-            persisted = componentRepository.saveAndFlush(component);
-        } catch (DataIntegrityViolationException exception) {
-            if (isDuplicateNameViolation(exception)) {
-                throw new ComponentNameConflictException();
-            }
-            throw exception;
-        }
-
-        return ResponseEntity.created(URI.create("/api/components/" + persisted.getId()))
-                .body(ComponentResponse.from(persisted));
+    ResponseEntity<ComponentResponse> create(
+            @Valid @RequestBody CreateComponentRequest request) {
+        SoftwareComponent component = componentService.register(
+                request.name(), request.description());
+        return ResponseEntity.created(URI.create("/api/components/" + component.getId()))
+                .body(ComponentResponse.from(component));
     }
 
     @GetMapping("/{id}")
     ResponseEntity<ComponentResponse> get(@PathVariable UUID id) {
-        SoftwareComponent component = componentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Component", id));
-        return ResponseEntity.ok(ComponentResponse.from(component));
+        return ResponseEntity.ok(ComponentResponse.from(componentService.get(id)));
     }
 
-    private static boolean isDuplicateNameViolation(DataIntegrityViolationException exception) {
-        String sqlState = null;
-        String constraintName = null;
-        Throwable current = exception;
-        while (current != null) {
-            if (current instanceof SQLException sqlException) {
-                sqlState = sqlException.getSQLState();
-            }
-            if (current instanceof ConstraintViolationException constraintViolation) {
-                constraintName = constraintViolation.getConstraintName();
-            }
-            current = current.getCause();
+    @GetMapping
+    ResponseEntity<List<ComponentResponse>> list() {
+        List<ComponentResponse> components = componentService.list().stream()
+                .map(ComponentResponse::from)
+                .toList();
+        return ResponseEntity.ok(components);
+    }
+
+    @PatchMapping("/{id}")
+    ResponseEntity<ComponentResponse> update(
+            @PathVariable UUID id, @RequestBody UpdateComponentRequest request) {
+        if (!request.unknownFields().isEmpty()) {
+            throw new InvalidDomainInputException(
+                    "Component update contains unsupported fields: "
+                            + String.join(", ", request.unknownFields()));
         }
-        return UNIQUE_VIOLATION_SQL_STATE.equals(sqlState)
-                && COMPONENT_NAME_CONSTRAINT.equals(constraintName);
+
+        UpdateSoftwareComponentCommand command = new UpdateSoftwareComponentCommand(
+                request.namePresent(), request.name(),
+                request.descriptionPresent(), request.description());
+        return ResponseEntity.ok(ComponentResponse.from(componentService.update(id, command)));
+    }
+
+    @PostMapping("/{id}/deactivation")
+    ResponseEntity<ComponentResponse> deactivate(@PathVariable UUID id) {
+        return ResponseEntity.ok(ComponentResponse.from(componentService.deactivate(id)));
     }
 
     public record CreateComponentRequest(@NotBlank String name, String description) {}
+
+    public static final class UpdateComponentRequest {
+        private String name;
+        private boolean namePresent;
+        private String description;
+        private boolean descriptionPresent;
+        private final Set<String> unknownFields = new LinkedHashSet<>();
+
+        @JsonSetter("name")
+        public void readName(String name) {
+            this.name = name;
+            this.namePresent = true;
+        }
+
+        @JsonSetter("description")
+        public void readDescription(String description) {
+            this.description = description;
+            this.descriptionPresent = true;
+        }
+
+        @JsonAnySetter
+        public void readUnknown(String field, Object ignoredValue) {
+            unknownFields.add(field);
+        }
+
+        String name() {
+            return name;
+        }
+
+        boolean namePresent() {
+            return namePresent;
+        }
+
+        String description() {
+            return description;
+        }
+
+        boolean descriptionPresent() {
+            return descriptionPresent;
+        }
+
+        Set<String> unknownFields() {
+            return Set.copyOf(unknownFields);
+        }
+    }
 
     public record ComponentResponse(
             UUID id, String name, String description, boolean active,

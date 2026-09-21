@@ -14,6 +14,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+import io.github.mrav7.softwareoperationsapi.application.ComponentHasActiveWorkException;
+import io.github.mrav7.softwareoperationsapi.application.ComponentNameConflictException;
+import io.github.mrav7.softwareoperationsapi.application.InvalidDomainInputException;
+import io.github.mrav7.softwareoperationsapi.application.ResourceNotFoundException;
 import io.github.mrav7.softwareoperationsapi.domain.InvalidWorkOrderStateException;
 
 @RestControllerAdvice
@@ -60,6 +64,12 @@ class ApiExceptionHandler {
     @ExceptionHandler(ComponentNameConflictException.class)
     ProblemDetail handleComponentNameConflict(
             ComponentNameConflictException exception, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(ComponentHasActiveWorkException.class)
+    ProblemDetail handleComponentHasActiveWork(
+            ComponentHasActiveWorkException exception, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, exception.getMessage(), request);
     }
 

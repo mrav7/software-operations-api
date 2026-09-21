@@ -20,6 +20,7 @@ import io.github.mrav7.softwareoperationsapi.persistence.WorkOrderRepository;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 @SpringBootTest
@@ -172,6 +173,84 @@ class ErrorContractTest {
                 "Component " + componentId + " is inactive", "/api/work-orders");
     }
 
+    @Test
+    void duplicateComponentRenameUsesConflictProblemDetail() throws Exception {
+        createComponent("existing-name");
+        String componentId = createComponent("other-name");
+
+        assertProblem(mvc.perform(patch("/api/components/{id}", componentId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"existing-name\"}"))
+                .andReturn().getResponse(), 409, "Conflict",
+                "Component name already exists", "/api/components/" + componentId);
+    }
+
+    @Test
+    void activeWorkPreventsComponentDeactivationWithConflictProblemDetail() throws Exception {
+        String componentId = createComponent("active-work-service");
+        MockHttpServletResponse createdWorkOrder = mvc.perform(
+                post("/api/work-orders").contentType(MediaType.APPLICATION_JSON)
+                .content(workOrderRequest(
+                        componentId, "CORRECTIVE_MAINTENANCE", "null")))
+                .andReturn().getResponse();
+        assertEquals(201, createdWorkOrder.getStatus());
+
+        assertProblem(mvc.perform(post("/api/components/{id}/deactivation", componentId))
+                .andReturn().getResponse(), 409, "Conflict",
+                "Component " + componentId + " has active work orders",
+                "/api/components/" + componentId + "/deactivation");
+    }
+
+    @Test
+    void componentPatchRejectsUnknownForbiddenAndEmptyRequests() throws Exception {
+        String componentId = createComponent();
+        String path = "/api/components/" + componentId;
+
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"unknownField\":\"x\"}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "Component update contains unsupported fields: unknownField", path);
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"active\":false}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "Component update contains unsupported fields: active", path);
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+                .andReturn().getResponse(), 400, "Bad Request",
+                "At least one component field must be provided", path);
+    }
+
+    @Test
+    void componentPatchRejectsNullAndBlankNamesAsBadRequests() throws Exception {
+        String componentId = createComponent();
+        String path = "/api/components/" + componentId;
+
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":null}"))
+                .andReturn().getResponse(), 400, "Bad Request", "name must not be null", path);
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"\"}"))
+                .andReturn().getResponse(), 400, "Bad Request", "name must not be blank", path);
+        assertProblem(mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"   \"}"))
+                .andReturn().getResponse(), 400, "Bad Request", "name must not be blank", path);
+    }
+
+    @Test
+    void missingComponentUpdateAndDeactivationUseNotFoundProblemDetail() throws Exception {
+        UUID missing = UUID.randomUUID();
+
+        assertProblem(mvc.perform(patch("/api/components/{id}", missing)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"description\":\"Updated\"}"))
+                .andReturn().getResponse(), 404, "Not Found",
+                "Component " + missing + " was not found", "/api/components/" + missing);
+        assertProblem(mvc.perform(post("/api/components/{id}/deactivation", missing))
+                .andReturn().getResponse(), 404, "Not Found",
+                "Component " + missing + " was not found",
+                "/api/components/" + missing + "/deactivation");
+    }
+
     private JsonNode assertProblem(MockHttpServletResponse response, int status, String title,
             String detail, String instance) throws Exception {
         assertEquals(status, response.getStatus());
@@ -185,8 +264,14 @@ class ErrorContractTest {
     }
 
     private String createComponent() throws Exception {
+        return createComponent("configuration-service");
+    }
+
+    private String createComponent(String name) throws Exception {
         return json.readTree(mvc.perform(post("/api/components").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"configuration-service\",\"description\":\"Configuration API\"}"))
+                .content("""
+                        {"name":"%s","description":"Configuration API"}
+                        """.formatted(name)))
                 .andReturn().getResponse().getContentAsString()).get("id").asString();
     }
 
