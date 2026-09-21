@@ -1,13 +1,15 @@
 package io.github.mrav7.softwareoperationsapi.application;
 
 import java.sql.SQLException;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,8 +56,10 @@ public class SoftwareComponentService {
         return requireComponent(id);
     }
 
-    public List<SoftwareComponent> list() {
-        return componentRepository.findAll();
+    public Page<SoftwareComponent> list(int page, int size) {
+        validatePage(page, size);
+        return componentRepository.findAll(PageRequest.of(page, size, Sort.by(
+                Sort.Order.desc("createdAt"), Sort.Order.asc("id"))));
     }
 
     @Transactional
@@ -140,5 +144,14 @@ public class SoftwareComponentService {
         }
         return UNIQUE_VIOLATION_SQL_STATE.equals(sqlState)
                 && COMPONENT_NAME_CONSTRAINT.equals(constraintName);
+    }
+
+    private static void validatePage(int page, int size) {
+        if (page < 0) {
+            throw new InvalidDomainInputException("page must not be negative");
+        }
+        if (size < 1 || size > 100) {
+            throw new InvalidDomainInputException("size must be between 1 and 100");
+        }
     }
 }

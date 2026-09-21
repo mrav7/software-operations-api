@@ -11,6 +11,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.Page;
 
 import io.github.mrav7.softwareoperationsapi.domain.Priority;
 import io.github.mrav7.softwareoperationsapi.domain.SoftwareComponent;
@@ -71,15 +72,23 @@ class SoftwareComponentServiceIntegrationTest {
     }
 
     @Test
-    void listReturnsAllPersistedComponentsWithoutDependingOnOrder() {
+    void listReturnsAPageInFixedCreatedAtDescendingThenIdAscendingOrder() {
         SoftwareComponent first = componentService.register("alpha-service", null);
         SoftwareComponent second = componentService.register("beta-service", null);
 
-        List<UUID> ids = componentService.list().stream().map(SoftwareComponent::getId).toList();
+        Page<SoftwareComponent> result = componentService.list(0, 20);
 
-        assertEquals(2, ids.size());
-        assertTrue(ids.contains(first.getId()));
-        assertTrue(ids.contains(second.getId()));
+        assertEquals(2, result.getTotalElements());
+        assertEquals(1, result.getTotalPages());
+        assertEquals(List.of(first, second).stream()
+                        .sorted((left, right) -> {
+                            int createdAt = right.getCreatedAt().compareTo(left.getCreatedAt());
+                            return createdAt != 0 ? createdAt
+                                    : left.getId().compareTo(right.getId());
+                        })
+                        .map(SoftwareComponent::getId)
+                        .toList(),
+                result.getContent().stream().map(SoftwareComponent::getId).toList());
     }
 
     @Test

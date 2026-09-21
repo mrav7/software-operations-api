@@ -128,6 +128,40 @@ part of generic PATCH, and there is no reactivation endpoint. A component cannot
 be deactivated while it has a WorkOrder in `CREATED`, `PLANNED`, `IN_PROGRESS`,
 or `BLOCKED`.
 
+### Collection queries and pagination
+
+`GET /api/components` and `GET /api/work-orders` return paged collections. Pages
+are zero-based: the default is `page=0`, the default size is `20`, and the
+maximum size is `100`.
+
+```bash
+curl 'http://localhost:8080/api/components?page=0&size=20'
+
+curl 'http://localhost:8080/api/work-orders?page=0&size=20'
+curl 'http://localhost:8080/api/work-orders?status=BLOCKED&priority=CRITICAL&page=0&size=20'
+```
+
+WorkOrder collection queries accept exactly these optional filters:
+`componentId`, `status`, `type`, and `priority`. Supplied filters combine with
+AND semantics. A nonexistent `componentId` is a valid criterion and returns an
+empty page when no WorkOrders match.
+
+Both collections use fixed server-side ordering: `createdAt` descending, then
+`id` ascending. v1 does not support client-defined sorting. A valid page beyond
+the last page returns `200 OK` with an empty `items` array and truthful totals.
+
+The collection response shape is:
+
+```json
+{
+  "items": [],
+  "page": 0,
+  "size": 20,
+  "totalElements": 0,
+  "totalPages": 0
+}
+```
+
 ### WorkOrder updates
 
 Modify permitted WorkOrder fields with PATCH:

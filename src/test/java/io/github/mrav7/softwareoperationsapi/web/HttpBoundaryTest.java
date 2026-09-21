@@ -84,9 +84,13 @@ class HttpBoundaryTest {
 
         assertEquals(200, response.getStatus());
         JsonNode body = json.readTree(response.getContentAsString());
-        assertEquals(2, body.size());
-        assertTrue(containsId(body, firstId));
-        assertTrue(containsId(body, secondId));
+        assertEquals(5, body.size());
+        assertEquals(0, body.get("page").asInt());
+        assertEquals(20, body.get("size").asInt());
+        assertEquals(2, body.get("totalElements").asInt());
+        assertEquals(1, body.get("totalPages").asInt());
+        assertTrue(containsId(body.get("items"), firstId));
+        assertTrue(containsId(body.get("items"), secondId));
     }
 
     @Test

@@ -3,6 +3,9 @@ package io.github.mrav7.softwareoperationsapi.application;
 import java.util.Objects;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +56,14 @@ public class WorkOrderService {
 
     public WorkOrder get(UUID id) {
         return requireWorkOrder(id);
+    }
+
+    public Page<WorkOrder> list(WorkOrderQuery query) {
+        validatePage(query.page(), query.size());
+        PageRequest pageable = PageRequest.of(query.page(), query.size(), Sort.by(
+                Sort.Order.desc("createdAt"), Sort.Order.asc("id")));
+        return workOrderRepository.findAllFiltered(
+                query.componentId(), query.status(), query.type(), query.priority(), pageable);
     }
 
     @Transactional
@@ -180,6 +191,15 @@ public class WorkOrderService {
             transition.run();
         } catch (IllegalArgumentException | NullPointerException exception) {
             throw new InvalidDomainInputException("Transition input is invalid");
+        }
+    }
+
+    private static void validatePage(int page, int size) {
+        if (page < 0) {
+            throw new InvalidDomainInputException("page must not be negative");
+        }
+        if (size < 1 || size > 100) {
+            throw new InvalidDomainInputException("size must be between 1 and 100");
         }
     }
 }
