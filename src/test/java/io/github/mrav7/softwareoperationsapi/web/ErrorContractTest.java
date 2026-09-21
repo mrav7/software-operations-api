@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -19,10 +20,12 @@ import io.github.mrav7.softwareoperationsapi.persistence.WorkLogRepository;
 import io.github.mrav7.softwareoperationsapi.persistence.WorkOrderRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -98,6 +101,37 @@ class ErrorContractTest {
         assertProblem(mvc.perform(get("/api/work-orders/not-a-uuid"))
                 .andReturn().getResponse(), 400, "Bad Request",
                 "Request parameter is invalid", "/api/work-orders/not-a-uuid");
+    }
+
+    @Test
+    void unsupportedMethodUsesMethodNotAllowedProblemDetailAndPreservesAllowHeader()
+            throws Exception {
+        MockHttpServletResponse response = mvc.perform(put("/api/components")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+                .andReturn().getResponse();
+
+        assertProblem(response, 405, "Method Not Allowed",
+                "Request method is not supported", "/api/components");
+        String allow = response.getHeader(HttpHeaders.ALLOW);
+        assertNotNull(allow);
+        assertTrue(allow.contains("GET"));
+        assertTrue(allow.contains("POST"));
+    }
+
+    @Test
+    void unsupportedMediaTypeUsesUnsupportedMediaTypeProblemDetailAndPreservesAcceptHeader()
+            throws Exception {
+        MockHttpServletResponse response = mvc.perform(post("/api/components")
+                .contentType(MediaType.TEXT_PLAIN)
+                .content("component"))
+                .andReturn().getResponse();
+
+        assertProblem(response, 415, "Unsupported Media Type",
+                "Content type is not supported", "/api/components");
+        String accept = response.getHeader(HttpHeaders.ACCEPT);
+        assertNotNull(accept);
+        assertTrue(accept.contains(MediaType.APPLICATION_JSON_VALUE));
     }
 
     @Test
