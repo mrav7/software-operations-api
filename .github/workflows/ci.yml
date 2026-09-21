@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: software_operations_api_test
+          POSTGRES_USER: software_operations_api_test
+          POSTGRES_PASSWORD: ci-test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U software_operations_api_test -d software_operations_api_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DB_URL: jdbc:postgresql://127.0.0.1:5432/software_operations_api_test
+      TEST_DB_USERNAME: software_operations_api_test
+      TEST_DB_PASSWORD: ci-test-password
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Show toolchain versions
+        run: |
+          java -version
+          javac -version
+          ./mvnw --version
+
+      - name: Build and test
+        run: ./mvnw --batch-mode --no-transfer-progress clean verify
+
+  docker-build:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show Docker versions
+        run: |
+          docker version
+          docker compose version
+
+      - name: Validate Docker Compose configuration
+        env:
+          POSTGRES_DB: software_operations_api_ci
+          POSTGRES_USER: software_operations_api_ci
+          POSTGRES_PASSWORD: ci-placeholder
+          APP_PORT: 8080
+          APP_ENVIRONMENT: ci
+          APP_LOG_LEVEL: INFO
+        run: docker compose config --quiet
+
+      - name: Build application image
+        run: docker build --tag software-operations-api:ci .

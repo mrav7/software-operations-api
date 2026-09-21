@@ -203,6 +203,36 @@ only when loss of the named PostgreSQL volume is intended:
 docker compose down -v
 ```
 
+## Continuous Integration
+
+GitHub Actions runs for pushes to `main` and pull requests targeting `main`. It
+verifies the complete Maven build and test suite against PostgreSQL 18, validates
+the Docker Compose configuration, and builds the application Docker image.
+
+After configuring the dedicated PostgreSQL test database, reproduce the central
+Maven check locally with:
+
+```bash
+./mvnw --batch-mode --no-transfer-progress clean verify
+```
+
+Reproduce the Docker checks by supplying disposable placeholder values required
+by Compose interpolation:
+
+```bash
+POSTGRES_DB=software_operations_api_ci \
+POSTGRES_USER=software_operations_api_ci \
+POSTGRES_PASSWORD=ci-placeholder \
+APP_PORT=8080 \
+APP_ENVIRONMENT=ci \
+APP_LOG_LEVEL=INFO \
+docker compose config --quiet
+
+docker build --tag software-operations-api:ci .
+```
+
+CI does not deploy the application or publish build artifacts or images.
+
 ## HTTP basics
 
 Register a component:
