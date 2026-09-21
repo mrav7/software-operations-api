@@ -1,8 +1,56 @@
 # Software Operations API
 
-Java/Spring Boot backend for software operational work and controlled lifecycle
-transitions. The HTTP API stores components and work orders in PostgreSQL and
-persists WorkOrder lifecycle transitions through the existing Java domain.
+[![CI](https://github.com/mrav7/software-operations-api/actions/workflows/ci.yml/badge.svg)](https://github.com/mrav7/software-operations-api/actions/workflows/ci.yml)
+
+Software Operations API is a Java/Spring Boot backend for managing software
+components, operational work orders, controlled lifecycle transitions, and
+persistent operational history.
+
+The project uses a fictional software-operations domain and focuses on explicit
+business rules, transactional consistency, concurrency handling, automated
+testing, and reproducible application operation.
+
+## Tech stack
+
+**Java 25 · Spring Boot 4 · Maven · PostgreSQL 18 · Spring Data JPA /
+Hibernate · Flyway · JUnit · Docker Compose · GitHub Actions**
+
+## Engineering highlights
+
+- Explicit WorkOrder lifecycle with domain-level invariants.
+- Progressive field immutability as operational work advances.
+- Transactional WorkLog history for lifecycle state changes.
+- PostgreSQL persistence with Flyway-owned schema migrations.
+- Optimistic locking for stale concurrent writes.
+- Targeted row locking for cross-entity consistency.
+- PostgreSQL-backed persistence, rollback, HTTP, safety, and concurrency tests.
+- `application/problem+json` error responses for API failures.
+- Health checks, external runtime configuration, and operational logging.
+- Multi-stage Docker build with a non-root runtime user.
+- GitHub Actions build and test verification against PostgreSQL.
+
+## WorkOrder lifecycle
+
+```text
+CREATED
+  ├──> PLANNED ──> IN_PROGRESS ──> COMPLETED
+  │                    │
+  │                    └──> BLOCKED ──> IN_PROGRESS
+  └──> CANCELLED
+```
+
+PLANNED, IN_PROGRESS, and BLOCKED may also transition to CANCELLED.
+COMPLETED and CANCELLED are terminal.
+
+Lifecycle changes are explicit domain operations rather than direct status
+updates. Transitions enforce state-specific rules, timestamps, required
+operational context, and persisted history within the application transaction.
+
+## Project status
+
+**v1 feature scope is complete and technically verified.** The repository is
+currently maintained as a personal technical project; future changes are
+expected to be limited to fixes or explicitly scoped improvements.
 
 ## Prerequisites
 
