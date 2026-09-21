@@ -107,6 +107,54 @@ curl http://localhost:8080/api/work-orders/WORK_ORDER_ID
 Replace the ID placeholders with UUIDs returned by the API. Retrieval returns
 `200 OK`; new work orders start in `CREATED`.
 
+### Component management
+
+List components, update the permitted component fields, or deactivate a
+component with the dedicated operation:
+
+```bash
+curl http://localhost:8080/api/components
+
+curl -i -X PATCH -H 'Content-Type: application/json' \
+  -d '{"description":"Updated component description"}' \
+  http://localhost:8080/api/components/COMPONENT_ID
+
+curl -i -X POST \
+  http://localhost:8080/api/components/COMPONENT_ID/deactivation
+```
+
+Component PATCH requests may edit `name` and `description`. Deactivation is not
+part of generic PATCH, and there is no reactivation endpoint. A component cannot
+be deactivated while it has a WorkOrder in `CREATED`, `PLANNED`, `IN_PROGRESS`,
+or `BLOCKED`.
+
+### WorkOrder updates
+
+Modify permitted WorkOrder fields with PATCH:
+
+```bash
+curl -i -X PATCH -H 'Content-Type: application/json' \
+  -d '{"title":"Deploy approved release","priority":"CRITICAL","targetVersion":"2.4.2"}' \
+  http://localhost:8080/api/work-orders/WORK_ORDER_ID
+```
+
+The permitted fields are `componentId`, `type`, `title`, `description`,
+`priority`, and `targetVersion`. Field editability narrows as work progresses:
+
+| WorkOrder field | Editable while |
+|---|---|
+| `componentId` | `CREATED` |
+| `type` | `CREATED` |
+| `title` | `CREATED`, `PLANNED` |
+| `description` | `CREATED`, `PLANNED` |
+| `priority` | `CREATED`, `PLANNED`, `IN_PROGRESS`, `BLOCKED` |
+| `targetVersion` | `CREATED`, `PLANNED` |
+
+A WorkOrder may be reassigned only while `CREATED`; a different target
+component must exist and be active. Status is never directly editable and must
+change through the explicit lifecycle endpoint. `COMPLETED` and `CANCELLED` are
+terminal states.
+
 ## Lifecycle transitions and errors
 
 Use an explicit action to change a WorkOrder lifecycle state:
@@ -127,7 +175,8 @@ Errors use `application/problem+json`:
 - `400 Bad Request`: invalid request or operation input.
 - `404 Not Found`: unknown component or WorkOrder.
 - `409 Conflict`: lifecycle action incompatible with the WorkOrder state,
-  duplicate component name, or inactive component selected for new work.
+  duplicate component name, inactive component selected for creation or
+  reassignment, or component deactivation blocked by active work.
 
 For example, a blank required field returns a ProblemDetail response with an
 `errors` list. The API does not expose direct status editing.
@@ -138,6 +187,9 @@ their responses are returned. Flyway owns schema creation and evolution, while
 Hibernate validates that the mapped entities match the migrated schema. HTTP-created
 resources remain available across application restarts while their PostgreSQL data
 is retained.
+
+Write use cases execute within Spring transaction boundaries over PostgreSQL.
+Existing managed entities are persisted through JPA dirty checking at commit.
 
 ## Source layout
 
